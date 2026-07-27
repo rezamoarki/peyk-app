@@ -183,7 +183,7 @@ textarea{min-height:64px;resize:vertical;}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://unpkg.com/tesseract.js@v5.1.1/dist/tesseract.min.js"></script>
 <script>
-const APP_VERSION = 'v3.0 · 2026-07-19';
+const APP_VERSION = 'v3.4 · 2026-07-27';
 const STORAGE_KEY_PREFIX = 'orders:';
 const CURRENCIES = [
   { code:'GBP', label:'پوند (GBP)', symbol:'£' },
@@ -238,6 +238,108 @@ function setSavedLocations(list){
   localStorage.setItem('saved_locations', JSON.stringify(list));
 }
 
+const CAESAR_RESORT_BLOCKS = [
+  {n:1,name:'Victorius',phase:1},{n:2,name:'Valerius',phase:1},{n:3,name:'Titus',phase:1},
+  {n:4,name:'Silvanus',phase:1},{n:5,name:'Augustus',phase:1},{n:6,name:'Brutus',phase:1},
+  {n:7,name:'Cassius',phase:1},{n:8,name:'Claudia',phase:1},{n:9,name:'Claudius',phase:1},
+  {n:10,name:'Constantine',phase:1},{n:11,name:'Julius',phase:1},{n:12,name:'Liberius',phase:1},
+  {n:13,name:'Maximus',phase:1},{n:14,name:'Octavius',phase:1},{n:15,name:'Marius',phase:1},
+  {n:16,name:'Alexius',phase:2},{n:17,name:'Rufus',phase:2},{n:18,name:'Tiberius',phase:2},
+  {n:19,name:'Spartacus',phase:2},{n:20,name:'Aurelius',phase:2},{n:21,name:'Flavius',phase:2},
+  {n:22,name:'Vitus',phase:2},{n:23,name:'Andreanius',phase:2},{n:24,name:'Cornelius',phase:2},
+  {n:25,name:'Marcus',phase:3},{n:26,name:'Gallus',phase:3},{n:27,name:'Lucius',phase:3},
+  {n:28,name:'Aspasianus',phase:3},{n:29,name:'Neron',phase:3},{n:30,name:'Amelius',phase:3},
+  {n:31,name:'Commodus',phase:3},
+  {n:32,name:'Romulus',phase:2},{n:33,name:'Remus',phase:2},{n:34,name:'Italus',phase:2},
+  {n:35,name:'Arrius',phase:4},{n:36,name:'Amadeus',phase:4},{n:37,name:'Atilius',phase:4},
+  {n:38,name:'Severus',phase:4},{n:39,name:'Socrates',phase:4},{n:40,name:'Didius',phase:4},
+  {n:41,name:'Clarus',phase:4},{n:42,name:'Pompeus',phase:4},
+  {n:43,name:'Marcellus',phase:1},{n:44,name:'Cyrus',phase:1},{n:45,name:'Darius',phase:1}
+];
+
+const CAESAR_NAME_FA_VARIANTS = {
+  Victorius:['ویکتوریوس'], Valerius:['والریوس'], Titus:['تیتوس','تیتوز'], Silvanus:['سیلوانوس'],
+  Augustus:['آگوستوس','اگوستوس'], Brutus:['بروتوس'], Cassius:['کاسیوس'], Claudia:['کلادیا'],
+  Claudius:['کلادیوس'], Constantine:['کنستانتین'], Julius:['جولیوس'], Liberius:['لیبریوس'],
+  Maximus:['ماکسیموس'], Octavius:['اکتاویوس','اوکتاویوس'], Marius:['ماریوس'],
+  Alexius:['الکسیوس'], Rufus:['روفوس'], Tiberius:['تیبریوس'], Spartacus:['اسپارتاکوس'],
+  Aurelius:['اورلیوس'], Flavius:['فلاویوس'], Vitus:['ویتوس'], Andreanius:['آندریانیوس'],
+  Cornelius:['کورنلیوس'], Marcus:['مارکوس'], Gallus:['گالوس'], Lucius:['لوسیوس'],
+  Aspasianus:['آسپازیانوس'], Neron:['نرون'], Amelius:['آملیوس'], Commodus:['کومودوس','کوموداس'],
+  Romulus:['رومولوس'], Remus:['رموس'], Italus:['ایتالوس'], Arrius:['آریوس'],
+  Amadeus:['آمادئوس','آمادیوس'], Atilius:['آتیلیوس'], Severus:['سوروس'], Socrates:['سقراط','سوکراتس'],
+  Didius:['دیدیوس'], Clarus:['کلاروس'], Pompeus:['پومپئوس'], Marcellus:['مارسلوس'],
+  Cyrus:['سایروس','کوروش'], Darius:['داریوش','داریوس']
+};
+
+function findCaesarBlockMatch(text){
+  if(!text) return null;
+  const norm = text.toLowerCase();
+  for(const block of CAESAR_RESORT_BLOCKS){
+    const variants = [block.name.toLowerCase()].concat((CAESAR_NAME_FA_VARIANTS[block.name] || []));
+    if(variants.some(v => norm.includes(v.toLowerCase()))){
+      return block;
+    }
+  }
+  return null;
+}
+
+function checkCaesarBlockMatch(){
+  const banner = document.getElementById('caesarMatchBanner');
+  if(!banner) return;
+  const addrField = document.getElementById('f_address');
+  const addr = addrField ? addrField.value : '';
+  const block = findCaesarBlockMatch(addr);
+  if(!block){
+    banner.innerHTML = '';
+    return;
+  }
+  const savedId = 'loc_caesar_' + block.n;
+  const saved = getSavedLocations().find(l => l.id === savedId);
+  if(saved && saved.mapLink){
+    banner.innerHTML = `<div class="order-note" style="margin-top:6px;color:var(--teal);">🏛 بلاک ${block.n} (${block.name}) شناسایی شد — لینک نقشه‌ی ذخیره‌شده پیدا شد.
+      <span style="text-decoration:underline;cursor:pointer;color:var(--amber);" onclick="applyCaesarMatch(${block.n})">اعمال لینک نقشه</span></div>`;
+  } else {
+    banner.innerHTML = `<div class="order-note" style="margin-top:6px;">🏛 بلاک ${block.n} (${block.name}) شناسایی شد، ولی هنوز لینک نقشه‌ای براش ذخیره نشده. وقتی رسیدی، از «📍 رسیدم اینجا» یا «📷 اسکن QR» استفاده کن تا دفعه‌ی بعد آماده باشه.</div>`;
+  }
+}
+
+function applyCaesarMatch(blockNum){
+  const saved = getSavedLocations().find(l => l.id === 'loc_caesar_' + blockNum);
+  if(!saved || !saved.mapLink) return;
+  capturedQrLink = saved.mapLink;
+  const s = document.getElementById('qrLinkStatus');
+  if(s){ s.textContent = 'لینک نقشه ثبت شده ✓'; s.style.color = 'var(--teal)'; }
+  toast('لینک نقشه‌ی بلاک اعمال شد');
+  checkCaesarBlockMatch();
+}
+
+function seedCaesarResortBlocks(){
+  const existing = getSavedLocations();
+  const existingNames = new Set(existing.map(l => l.name));
+  let addedCount = 0;
+  const toAdd = [];
+  CAESAR_RESORT_BLOCKS.forEach(b => {
+    const name = 'سزار - بلاک ' + b.n + ' (' + b.name + ')';
+    if(existingNames.has(name)) return;
+    toAdd.push({
+      id: 'loc_caesar_' + b.n,
+      name: name,
+      address: 'شهرک سزار (Caesar Resort) - فاز ' + b.phase + ' - بلاک شماره ' + b.n + ' - ' + b.name,
+      mapLink: null
+    });
+    addedCount++;
+  });
+  setSavedLocations(existing.concat(toAdd));
+  return addedCount;
+}
+
+function seedCaesarResortBlocksFromSettings(){
+  const count = seedCaesarResortBlocks();
+  toast(count > 0 ? count + ' بلاک شهرک سزار اضافه شد' : 'قبلاً اضافه شده بودن');
+  if(document.getElementById('locationsListWrap')) renderLocationsList();
+}
+
 function getApiKey(){
   return localStorage.getItem('anthropic_api_key') || '';
 }
@@ -289,6 +391,9 @@ function openLocationsManager(){
       <input type="text" id="locSearch" placeholder="جستجو بر اساس اسم یا آدرس..." oninput="renderLocationsList()" style="margin-bottom:10px;">
       <div class="save-bar" style="margin-bottom:4px;">
         <button class="save" onclick="openLocationForm(null)">+ لوکیشن جدید</button>
+      </div>
+      <div class="save-bar" style="margin-bottom:4px;">
+        <button class="cancel" onclick="seedCaesarResortBlocksFromSettings()">🏛 بارگذاری بلاک‌های شهرک سزار (۴۵ تا)</button>
       </div>
       <div id="locationsListWrap"></div>
     </div>
@@ -465,7 +570,8 @@ function saveCurrentAddressAsLocation(){
     toast('اول آدرس رو وارد کن');
     return;
   }
-  openLocationForm(null, { name:'', address, mapLink: capturedQrLink || null });
+  const name = (document.getElementById('f_name') || {}).value || '';
+  openLocationForm(null, { name, address, mapLink: capturedQrLink || null });
 }
 
 function openSettings(){
@@ -1148,14 +1254,20 @@ function recordArrivalLocation(orderId){
 }
 
 function offerSaveArrivalAsLocation(order){
+  const block = findCaesarBlockMatch(order.address || order.name || '');
+  const existingId = block ? 'loc_caesar_' + block.n : null;
   const root = document.getElementById('modalRoot');
+  const saveOnClick = existingId
+    ? `closeLocationForm();openLocationForm('${existingId}');document.getElementById('loc_address').value='${escapeJs(order.address||'')}';window._locFormMapLink='${order.mapLink}';document.getElementById('locMapLinkStatus').textContent='لینک نقشه ثبت شده ✓';document.getElementById('locMapLinkStatus').style.color='var(--teal)';`
+    : `closeLocationForm();openLocationForm(null, {name:'${escapeJs(order.name||order.address||'')}', address:'${escapeJs(order.address||'')}', mapLink:'${order.mapLink}'})`;
+  const label = existingId ? ('آره، لینک نقشه‌ی بلاک ' + block.n + ' (' + block.name + ') رو به‌روز کن') : 'آره، ذخیره کن';
   root.insertAdjacentHTML('beforeend', `
   <div class="overlay" style="z-index:70;">
     <div class="sheet" style="max-width:400px;border-radius:16px;">
       <p style="font-size:14px;line-height:1.7;">می‌خوای این موقعیت دقیق رو برای دفعه‌ی بعد هم ذخیره کنی؟</p>
       <div class="save-bar">
         <button class="cancel" onclick="closeLocationForm()">نه، فقط همین سفارش</button>
-        <button class="save" onclick="closeLocationForm();openLocationForm(null, {name:'${escapeJs(order.name||order.address||'')}', address:'${escapeJs(order.address||'')}', mapLink:'${order.mapLink}'})">آره، ذخیره کن</button>
+        <button class="save" onclick="${saveOnClick}">${label}</button>
       </div>
     </div>
   </div>`);
@@ -1294,7 +1406,8 @@ function openOrderModal(existing){
         <label style="margin:0;">آدرس</label>
         <button type="button" onclick="pasteAddress()" style="background:var(--card2);border:1px solid var(--line);color:var(--amber);font-size:11.5px;padding:5px 10px;border-radius:8px;font-family:inherit;">چسباندن از کلیپ‌بورد</button>
       </div>
-      <textarea id="f_address" style="margin-top:5px;" oninput="scheduleDraftSave()">${escapeHtml(o.address||'')}</textarea>
+      <textarea id="f_address" style="margin-top:5px;" oninput="scheduleDraftSave();checkCaesarBlockMatch()">${escapeHtml(o.address||'')}</textarea>
+      <div id="caesarMatchBanner"></div>
       <div style="display:flex;gap:8px;margin-top:6px;flex-wrap:wrap;">
         <button type="button" onclick="pickLocationForOrder()" style="background:var(--card2);border:1px solid var(--line);color:var(--text);font-size:11.5px;padding:6px 10px;border-radius:8px;font-family:inherit;">📍 انتخاب از لوکیشن‌های ذخیره‌شده</button>
         <button type="button" onclick="saveCurrentAddressAsLocation()" style="background:var(--card2);border:1px solid var(--line);color:var(--text);font-size:11.5px;padding:6px 10px;border-radius:8px;font-family:inherit;">💾 ذخیره این آدرس برای بعد</button>
@@ -1337,7 +1450,7 @@ function openOrderModal(existing){
   </div>`;
 
   setupChipGroup('srcGroup', o.source);
-  setTimeout(() => showDuplicateWarning(findDuplicateOrder()), 0);
+  setTimeout(() => { showDuplicateWarning(findDuplicateOrder()); checkCaesarBlockMatch(); }, 0);
 }
 
 function setupChipGroup(groupId, activeVal){
@@ -1595,6 +1708,7 @@ async function runOfflineOcr(){
     }
     statusEl.innerHTML = 'خونده شد (روش آفلاین دقت کمتری داره) — ' + (parsed.foundCount) + ' مورد پیدا شد. حتماً بررسی کن.';
     showDuplicateWarning(findDuplicateOrder());
+    checkCaesarBlockMatch();
   }catch(e){
     statusEl.textContent = 'خطا در خواندن آفلاین، دستی وارد کن یا از حالت هوش مصنوعی استفاده کن.';
   }
@@ -1696,6 +1810,7 @@ function applyExtractedFields(parsed){
     });
   }
   showDuplicateWarning(findDuplicateOrder());
+  checkCaesarBlockMatch();
 }
 
 const GEMINI_SCHEMA = {
@@ -2539,6 +2654,46 @@ if('serviceWorker' in navigator && window.isSecureContext){
     });
   });
 }
+
+let backExitArmed = false;
+let backExitTimer = null;
+
+function pushBackGuard(){
+  try{ history.pushState({ peykGuard: true }, '', location.href); }catch(e){}
+}
+
+function hasOpenOverlay(){
+  return !!(document.getElementById('qrScanOverlay') || document.getElementById('lightboxOverlay') ||
+    (document.getElementById('modalRoot') && document.getElementById('modalRoot').innerHTML.trim() !== ''));
+}
+
+function closeTopmostOverlay(){
+  if(document.getElementById('qrScanOverlay')){ stopQrScanner(); return; }
+  if(document.getElementById('lightboxOverlay')){ closeLightbox(); return; }
+  const overlays = document.querySelectorAll('#modalRoot .overlay, #modalRoot .qr-scan-overlay');
+  if(overlays.length > 1){
+    overlays[overlays.length - 1].remove();
+  } else if(overlays.length === 1){
+    closeModal();
+  }
+}
+
+window.addEventListener('popstate', () => {
+  if(hasOpenOverlay()){
+    closeTopmostOverlay();
+    pushBackGuard();
+    return;
+  }
+  if(backExitArmed){
+    return; // second back press within the window — let it actually exit
+  }
+  backExitArmed = true;
+  toast('برای خروج از برنامه، دوباره دکمه برگشت رو بزن');
+  if(backExitTimer) clearTimeout(backExitTimer);
+  backExitTimer = setTimeout(() => { backExitArmed = false; }, 2000);
+});
+
+pushBackGuard();
 </script>
 </body>
 </html>
