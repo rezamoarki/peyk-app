@@ -191,7 +191,7 @@ textarea{min-height:64px;resize:vertical;}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script>
-const APP_VERSION = 'v4.5 · 2026-07-30';
+const APP_VERSION = 'v4.6 · 2026-07-30';
 const STORAGE_KEY_PREFIX = 'orders:';
 const CURRENCIES = [
   { code:'GBP', label:'پوند (GBP)', symbol:'£' },
@@ -232,6 +232,7 @@ let capturedReceiptTime = null;
 let capturedPhotoHash = null;
 
 let payingOrderId = null;
+let paymentDraft = null;
 
 function getSavedLocations(){
   try{
@@ -1431,9 +1432,11 @@ function render(){
       else if(p.method === 'کارت') cardTotal += Number(p.amountTL) || 0;
       else if(p.method === 'واریز') transferTotal += Number(p.amountTL) || 0;
       else if(p.method === 'ارز'){
+        cashTotal += Number(p.tlEquivalent) || 0;
         forexTotals[p.currency] = (forexTotals[p.currency] || 0) + (Number(p.currencyAmount) || 0);
       }
     });
+    if(o.changeGiven) cashTotal -= Number(o.changeGiven) || 0;
   });
   const tlTotal = cashTotal + cardTotal + transferTotal;
 
@@ -1483,11 +1486,14 @@ function paymentBadge(o){
   const classMap = { 'نقد':'cash', 'کارت':'card', 'واریز':'transfer', 'ارز':'forex', 'آنلاین':'online', 'تیپ':'online' };
   let base = payments.map(p => {
     const cls = classMap[p.method] || 'src';
-    const amtTxt = p.method === 'ارز' ? (fmt(p.currencyAmount) + currencySymbol(p.currency))
+    const amtTxt = p.method === 'ارز' ? (fmt(p.currencyAmount) + currencySymbol(p.currency) + (p.tlEquivalent ? (' (≈' + fmt(p.tlEquivalent) + ' TL)') : ''))
       : p.method === 'آنلاین' ? 'قبلاً پرداخت شده'
       : (fmt(p.amountTL) + ' TL');
     return `<span class="badge ${cls}">${escapeHtml(p.method)} · ${amtTxt}</span>`;
   }).join(' ');
+  if(o.changeGiven){
+    base += ' <span class="badge cash">🔄 برگشتی: ' + fmt(o.changeGiven) + ' TL</span>';
+  }
   const mismatch = getOrderMismatch(o);
   if(mismatch){
     const sign = mismatch > 0 ? '+' : '';
@@ -2391,19 +2397,49 @@ async function saveOrderForm(forceSave){
   if(!incomplete) toast('سفارش ذخیره شد');
 }
 
-let paymentRowsState = [];
-
-function legacyPaymentToRows(o){
-  if(o.payments && o.payments.length) return JSON.parse(JSON.stringify(o.payments));
-  if(o.payment) return [JSON.parse(JSON.stringify(o.payment))];
-  return [{ method: null }];
+function legacyPaymentToDraft(o){
+  const draft = {
+    online: { used:false, note:'', posPhoto:null, posMedia:null },
+    cards: [{ amountTL:'', posPhoto:null, posMedia:null }],
+    cashTL: '',
+    forex: [],
+    transfer: { amountTL:'', note:'', posPhoto:null, posMedia:null },
+    tip: '',
+    changeGiven: ''
+  };
+  const payments = getOrderPayments(o);
+  let firstCard = true;
+  payments.forEach(p => {
+    if(!p || !p.method) return;
+    if(p.method === 'آنلاین'){
+      draft.online = { used:true, note:p.note||'', posPhoto:p.posPhoto||null, posMedia:p.posMedia||null };
+    } else if(p.method === 'کارت'){
+      if(firstCard){ draft.cards = []; firstCard = false; }
+      draft.cards.push({ amountTL: p.amountTL, posPhoto:p.posPhoto||null, posMedia:p.posMedia||null });
+    } else if(p.method === 'نقد'){
+      draft.cashTL = p.grossAmountTL != null ? p.grossAmountTL : p.amountTL;
+      if(p.changeGiven) draft.changeGiven = p.changeGiven;
+    } else if(p.method === 'ارز'){
+      draft.forex.push({ currency: p.currency, amount: p.currencyAmount, rate: p.rate || '' });
+    } else if(p.method === 'واریز'){
+      draft.transfer = { amountTL: p.amountTL, note: p.note||'', posPhoto:p.posPhoto||null, posMedia:p.posMedia||null };
+    } else if(p.method === 'تیپ'){
+      draft.tip = p.amountTL;
+    }
+  });
+  if(draft.cards.length === 0) draft.cards.push({ amountTL:'', posPhoto:null, posMedia:null });
+  return draft;
 }
 
 function openDeliveryPayment(orderId){
   const o = currentOrders.find(x => x.id === orderId);
   if(!o) return;
   payingOrderId = orderId;
-  paymentRowsState = legacyPaymentToRows(o);
+  paymentDraft = legacyPaymentToDraft(o);
+  window._paymentPhotos = {};
+  if(paymentDraft.online.posPhoto) window._paymentPhotos.online = { base64: paymentDraft.online.posPhoto, media: paymentDraft.online.posMedia };
+  paymentDraft.cards.forEach((c,i) => { if(c.posPhoto) window._paymentPhotos['card_'+i] = { base64: c.posPhoto, media: c.posMedia }; });
+  if(paymentDraft.transfer.posPhoto) window._paymentPhotos.transfer = { base64: paymentDraft.transfer.posPhoto, media: paymentDraft.transfer.posMedia };
 
   const root = document.getElementById('modalRoot');
   root.innerHTML = `
@@ -2414,222 +2450,368 @@ function openDeliveryPayment(orderId){
         <button class="close-x" onclick="closeModal()">×</button>
       </div>
       <div class="order-note" style="margin-bottom:10px;">مبلغ سفارش طبق فیش: <b class="mono">${o.amount ? fmt(o.amount) + ' TL' : 'نامشخص'}</b></div>
-
-      <div id="paymentRowsContainer"></div>
-      <div class="save-bar">
-        <button class="cancel" onclick="addPaymentRow()">+ افزودن پرداخت دیگر (تقسیمی)</button>
-      </div>
-
+      <div id="paymentSectionsWrap"></div>
       <div class="save-bar">
         <button class="cancel" onclick="closeModal()">انصراف</button>
         <button class="save" onclick="confirmDelivery()">تایید و بستن سفارش</button>
       </div>
     </div>
   </div>`;
-
-  renderPaymentRowsUI();
+  renderPaymentSections();
 }
 
-function syncPaymentRowsFromDom(){
-  document.querySelectorAll('.pay-row').forEach((rowEl) => {
-    const i = Number(rowEl.dataset.idx);
-    if(!paymentRowsState[i]) return;
-    const st = paymentRowsState[i];
-    const amtEl = rowEl.querySelector('.pr-amount');
-    if(amtEl) st.amountTL = amtEl.value;
-    const curSel = rowEl.querySelector('.pr-currency');
-    if(curSel) st.currency = curSel.value;
-    const curAmt = rowEl.querySelector('.pr-currency-amount');
-    if(curAmt) st.currencyAmount = curAmt.value;
-    const noteEl = rowEl.querySelector('.pr-note');
-    if(noteEl) st.note = noteEl.value;
-  });
-}
-
-function setPaymentRowMethod(i, method){
-  syncPaymentRowsFromDom();
-  paymentRowsState[i].method = method;
-  renderPaymentRowsUI();
-}
-
-function addPaymentRow(){
-  syncPaymentRowsFromDom();
-  paymentRowsState.push({ method: null });
-  renderPaymentRowsUI();
-}
-
-function removePaymentRow(i){
-  syncPaymentRowsFromDom();
-  paymentRowsState.splice(i, 1);
-  if(paymentRowsState.length === 0) paymentRowsState.push({ method: null });
-  renderPaymentRowsUI();
-}
-
-function renderPaymentRowsUI(){
-  const container = document.getElementById('paymentRowsContainer');
-  if(!container) return;
-  const o = currentOrders.find(x => x.id === payingOrderId);
-  const defaultTL = o ? (o.amount || '') : '';
-
-  container.innerHTML = paymentRowsState.map((row, i) => {
-    const methods = ['نقد','کارت','واریز','ارز','آنلاین','تیپ'];
-    const methodLabels = { 'نقد':'نقد', 'کارت':'کارت (پوز)', 'واریز':'واریز', 'ارز':'ارز خارجی', 'آنلاین':'پرداخت آنلاین (قبلاً پرداخت شده)', 'تیپ':'تیپ' };
-    const chips = methods.map(m => `<button type="button" class="chip ${row.method===m?'active':''}" onclick="setPaymentRowMethod(${i}, '${m}')">${methodLabels[m]}</button>`).join('');
-
-    let fields = '';
-    if(row.method === 'نقد' || row.method === 'کارت' || row.method === 'واریز'){
-      fields += `<label>مبلغ دریافتی (لیر)</label>
-        <input type="text" inputmode="numeric" class="pr-amount" value="${row.amountTL != null ? row.amountTL : (paymentRowsState.length===1 ? defaultTL : '')}">`;
-      if(row.method === 'واریز'){
-        fields += `<label>یادداشت (شماره پیگیری، نام واریزکننده)</label>
-        <textarea class="pr-note">${escapeHtml(row.note || '')}</textarea>`;
-      }
-      if(row.method === 'کارت' || row.method === 'واریز'){
-        fields += posPhotoBlockHtml(i, row);
-      }
-    } else if(row.method === 'ارز'){
-      fields += `<label>نوع ارز</label>
-        <select class="pr-currency">
-          ${CURRENCIES.map(c => `<option value="${c.code}" ${row.currency===c.code?'selected':''}>${c.label}</option>`).join('')}
-        </select>
-        <label>مبلغ دریافتی (به همون ارز)</label>
-        <input type="text" inputmode="decimal" class="pr-currency-amount" value="${row.currencyAmount != null ? row.currencyAmount : ''}">
-        <label>یادداشت (اختیاری)</label>
-        <textarea class="pr-note">${escapeHtml(row.note || '')}</textarea>
-        ${posPhotoBlockHtml(i, row)}`;
-    } else if(row.method === 'آنلاین'){
-      fields += `<div class="order-note" style="margin-top:8px;color:var(--teal);">✓ این سفارش قبلاً آنلاین پرداخت شده — چیزی از مشتری نگیر.</div>
-        <label>یادداشت (اختیاری)</label>
-        <textarea class="pr-note">${escapeHtml(row.note || '')}</textarea>
-        ${posPhotoBlockHtml(i, row, 'عکس فیش واریزی/تاییدیه پرداخت آنلاین (توصیه‌شده)')}`;
-    } else if(row.method === 'تیپ'){
-      fields += `<div class="order-note" style="margin-top:8px;color:var(--amber);">این جدا از مبلغ سفارشه — توی محاسبه‌ی اختلاف حساب نمی‌شه.</div>
-        <label>مبلغ تیپ (لیر)</label>
-        <input type="text" inputmode="numeric" class="pr-amount" value="${row.amountTL != null ? row.amountTL : ''}">`;
-    }
-
-    return `
-    <div class="order pay-row" data-idx="${i}" style="background:var(--card);color:var(--text);border:1px solid var(--line);">
-      <div class="order-body">
-        <div class="order-top">
-          <span class="order-num">پرداخت ${i+1}</span>
-          ${paymentRowsState.length > 1 ? `<button class="danger" style="flex:0;padding:2px 10px;" onclick="removePaymentRow(${i})">حذف این ردیف</button>` : ''}
-        </div>
-        <label>روش دریافت</label>
-        <div class="chip-group">${chips}</div>
-        ${fields}
-      </div>
-    </div>`;
-  }).join('');
-}
-
-function posPhotoBlockHtml(i, row, label){
+function photoBlockHtml(key, existing, label){
+  const stored = (window._paymentPhotos && window._paymentPhotos[key]) || null;
+  const base64 = stored ? stored.base64 : (existing ? existing.posPhoto : null);
+  const media = stored ? stored.media : (existing ? existing.posMedia : null);
   return `
       <label>${label || 'عکس رسید (اختیاری)'}</label>
       <div class="photo-zone">
-        <div id="posPreviewWrap_${i}">${row.posPhoto ? `<img src="data:${row.posMedia};base64,${row.posPhoto}" onclick="openImageLightbox(this.src)" style="cursor:zoom-in;">` : ''}</div>
+        <div id="payPhotoPreview_${key}">${base64 ? `<img src="data:${media};base64,${base64}" onclick="openImageLightbox(this.src)" style="cursor:zoom-in;">` : ''}</div>
         <div class="photo-btns">
-          <button onclick="document.getElementById('posCameraInput_${i}').click()">دوربین</button>
-          <button onclick="document.getElementById('posGalleryInput_${i}').click()">از گالری</button>
-          <button onclick="pastePosPhotoFromClipboard(${i})">چسباندن عکس</button>
+          <button onclick="document.getElementById('payPhotoCam_${key}').click()">دوربین</button>
+          <button onclick="document.getElementById('payPhotoGal_${key}').click()">از گالری</button>
         </div>
-        <input type="file" id="posCameraInput_${i}" class="hidden-file-input" accept="image/*" capture="environment" onchange="onPosPhotoSelected(event, ${i})">
-        <input type="file" id="posGalleryInput_${i}" class="hidden-file-input" accept="image/*" onchange="onPosPhotoSelected(event, ${i})">
+        <input type="file" id="payPhotoCam_${key}" class="hidden-file-input" accept="image/*" capture="environment" onchange="onPaymentPhotoSelected(event, '${key}')">
+        <input type="file" id="payPhotoGal_${key}" class="hidden-file-input" accept="image/*" onchange="onPaymentPhotoSelected(event, '${key}')">
       </div>
   `;
 }
 
-async function loadPosPhotoForRow(rowIndex, blob){
+function onPaymentPhotoSelected(evt, key){
+  const file = evt.target.files[0];
+  if(!file) return;
+  syncPaymentDraftFromDom();
   const reader = new FileReader();
   reader.onload = async () => {
     const originalDataUrl = reader.result;
-    const wrap = document.getElementById('posPreviewWrap_' + rowIndex);
+    const wrap = document.getElementById('payPhotoPreview_' + key);
     if(wrap) wrap.innerHTML = `<img src="${originalDataUrl}" onclick="openImageLightbox(this.src)" style="cursor:zoom-in;">`;
     const resized = await resizeImageDataUrl(originalDataUrl, 1600);
-    if(!paymentRowsState[rowIndex]) return;
-    paymentRowsState[rowIndex].posMedia = resized.dataUrl.startsWith('data:image/jpeg') ? 'image/jpeg' : (blob.type || 'image/jpeg');
-    paymentRowsState[rowIndex].posPhoto = resized.dataUrl.split(',')[1];
+    if(!window._paymentPhotos) window._paymentPhotos = {};
+    window._paymentPhotos[key] = {
+      media: resized.dataUrl.startsWith('data:image/jpeg') ? 'image/jpeg' : (file.type || 'image/jpeg'),
+      base64: resized.dataUrl.split(',')[1]
+    };
   };
-  reader.readAsDataURL(blob);
+  reader.readAsDataURL(file);
 }
 
-function onPosPhotoSelected(evt, rowIndex){
-  const file = evt.target.files[0];
-  if(!file) return;
-  syncPaymentRowsFromDom();
-  loadPosPhotoForRow(rowIndex, file);
+function syncPaymentDraftFromDom(){
+  const d = paymentDraft;
+  if(!d) return;
+  const onlineUsed = document.getElementById('pay_online_used');
+  if(onlineUsed) d.online.used = onlineUsed.checked;
+  const onlineNote = document.getElementById('pay_online_note');
+  if(onlineNote) d.online.note = onlineNote.value;
+
+  document.querySelectorAll('.card-amount').forEach(el => {
+    const i = Number(el.dataset.idx);
+    if(d.cards[i]) d.cards[i].amountTL = el.value;
+  });
+
+  const cashTl = document.getElementById('pay_cash_tl');
+  if(cashTl) d.cashTL = cashTl.value;
+
+  document.querySelectorAll('.forex-currency').forEach(el => {
+    const i = Number(el.dataset.idx);
+    if(d.forex[i]) d.forex[i].currency = el.value;
+  });
+  document.querySelectorAll('.forex-amount').forEach(el => {
+    const i = Number(el.dataset.idx);
+    if(d.forex[i]) d.forex[i].amount = el.value;
+  });
+  document.querySelectorAll('.forex-rate').forEach(el => {
+    const i = Number(el.dataset.idx);
+    if(d.forex[i]) d.forex[i].rate = el.value;
+  });
+
+  const transferTl = document.getElementById('pay_transfer_tl');
+  if(transferTl) d.transfer.amountTL = transferTl.value;
+  const transferNote = document.getElementById('pay_transfer_note');
+  if(transferNote) d.transfer.note = transferNote.value;
+
+  const tipTl = document.getElementById('pay_tip_tl');
+  if(tipTl) d.tip = tipTl.value;
+
+  const changeEl = document.getElementById('pay_change_given');
+  if(changeEl) d.changeGiven = changeEl.value;
 }
 
-async function pastePosPhotoFromClipboard(rowIndex){
-  if(!navigator.clipboard || !navigator.clipboard.read){
-    toast('این مرورگر از چسباندن عکس پشتیبانی نمی‌کنه');
-    return;
-  }
+function togglePayOnline(){
+  syncPaymentDraftFromDom();
+  paymentDraft.online.used = document.getElementById('pay_online_used').checked;
+  renderPaymentSections();
+}
+
+function addCardEntry(){
+  syncPaymentDraftFromDom();
+  paymentDraft.cards.push({ amountTL:'', posPhoto:null, posMedia:null });
+  renderPaymentSections();
+}
+
+function removeCardEntry(i){
+  syncPaymentDraftFromDom();
+  paymentDraft.cards.splice(i, 1);
+  if(paymentDraft.cards.length === 0) paymentDraft.cards.push({ amountTL:'', posPhoto:null, posMedia:null });
+  if(window._paymentPhotos) delete window._paymentPhotos['card_'+i];
+  renderPaymentSections();
+}
+
+function addForexEntry(){
+  syncPaymentDraftFromDom();
+  paymentDraft.forex.push({ currency: CURRENCIES[0].code, amount:'', rate:'' });
+  renderPaymentSections();
+}
+
+function removeForexEntry(i){
+  syncPaymentDraftFromDom();
+  paymentDraft.forex.splice(i, 1);
+  renderPaymentSections();
+}
+
+function onForexCurrencyChange(i){
+  syncPaymentDraftFromDom();
+  renderPaymentSections();
+}
+
+async function fetchTcmbRate(currencyCode){
   try{
-    const items = await navigator.clipboard.read();
-    let found = null;
-    for(const item of items){
-      const imgType = item.types.find(t => t.startsWith('image/'));
-      if(imgType){
-        found = await item.getType(imgType);
-        break;
+    const res = await fetch('https://www.tcmb.gov.tr/kurlar/today.xml');
+    if(!res.ok) return null;
+    const text = await res.text();
+    const xml = new DOMParser().parseFromString(text, 'text/xml');
+    const nodes = xml.getElementsByTagName('Currency');
+    for(let i=0;i<nodes.length;i++){
+      if(nodes[i].getAttribute('Kod') === currencyCode || nodes[i].getAttribute('CurrencyCode') === currencyCode){
+        const buying = nodes[i].getElementsByTagName('ForexBuying')[0];
+        if(buying && buying.textContent) return parseFloat(buying.textContent);
       }
     }
-    if(!found){
-      toast('عکسی توی کلیپ‌بورد پیدا نشد');
-      return;
-    }
-    syncPaymentRowsFromDom();
-    loadPosPhotoForRow(rowIndex, found);
-    toast('عکس چسبانده شد');
+    return null;
   }catch(e){
-    toast('اجازه دسترسی به کلیپ‌بورد داده نشد');
+    return null;
   }
+}
+
+async function fetchFrankfurterRate(currencyCode){
+  try{
+    const res = await fetch('https://api.frankfurter.app/latest?from=' + currencyCode + '&to=TRY');
+    if(!res.ok) return null;
+    const data = await res.json();
+    return data && data.rates && data.rates.TRY ? data.rates.TRY : null;
+  }catch(e){
+    return null;
+  }
+}
+
+async function fetchExchangeRateToTRY(currencyCode){
+  const tcmb = await fetchTcmbRate(currencyCode);
+  if(tcmb) return { rate: tcmb, source: 'بانک مرکزی ترکیه' };
+  const fallback = await fetchFrankfurterRate(currencyCode);
+  if(fallback) return { rate: fallback, source: 'نرخ بازار (جایگزین چون بانک مرکزی در دسترس نبود)' };
+  return null;
+}
+
+async function fetchAndApplyRate(i){
+  syncPaymentDraftFromDom();
+  const entry = paymentDraft.forex[i];
+  if(!entry) return;
+  const statusEl = document.getElementById('forex_status_' + i);
+  if(statusEl) statusEl.textContent = 'در حال گرفتن نرخ روز...';
+  const result = await fetchExchangeRateToTRY(entry.currency);
+  if(result){
+    entry.rate = result.rate;
+    renderPaymentSections();
+    toast('نرخ روز گرفته شد (' + result.source + ')');
+  } else {
+    if(statusEl) statusEl.textContent = 'نرخ روز پیدا نشد — دستی وارد کن';
+    toast('نتونستم نرخ روز رو بگیرم، دستی وارد کن');
+  }
+}
+
+function renderPaymentSections(){
+  const wrap = document.getElementById('paymentSectionsWrap');
+  if(!wrap) return;
+  const d = paymentDraft;
+
+  let html = '';
+
+  html += `
+  <div class="order" style="background:var(--card);color:var(--text);border:1px solid var(--line);">
+    <div class="order-body">
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-top:0;">
+        <input type="checkbox" id="pay_online_used" ${d.online.used ? 'checked' : ''} onchange="togglePayOnline()" style="width:18px;height:18px;">
+        <span>پرداخت آنلاین (قبلاً پرداخت شده)</span>
+      </label>
+      ${d.online.used ? `
+        <div class="order-note" style="color:var(--teal);">✓ چیزی از مشتری نگیر.</div>
+        <label>یادداشت (اختیاری)</label>
+        <textarea id="pay_online_note">${escapeHtml(d.online.note||'')}</textarea>
+        ${photoBlockHtml('online', d.online, 'عکس فیش/تاییدیه (اختیاری)')}
+      ` : ''}
+    </div>
+  </div>
+
+  <div class="order" style="background:var(--card);color:var(--text);border:1px solid var(--line);">
+    <div class="order-body">
+      <div class="order-num">کارت (پوز)</div>
+      ${d.cards.map((c,i) => `
+        <div style="${i>0?'border-top:1px dashed var(--line);margin-top:10px;padding-top:10px;':''}">
+          ${d.cards.length > 1 ? `<div style="text-align:left;"><button class="danger" style="padding:2px 10px;" onclick="removeCardEntry(${i})">حذف این کارت</button></div>` : ''}
+          <label>مبلغ کارت ${d.cards.length > 1 ? (i+1) : ''} (لیر)</label>
+          <input type="text" inputmode="numeric" class="card-amount" data-idx="${i}" value="${c.amountTL!=null?c.amountTL:''}">
+          ${photoBlockHtml('card_'+i, c, 'عکس فیش پوز (اختیاری)')}
+        </div>
+      `).join('')}
+      <div class="save-bar" style="margin-top:8px;">
+        <button class="cancel" onclick="addCardEntry()">+ افزودن کارت دیگر</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="order" style="background:var(--card);color:var(--text);border:1px solid var(--line);">
+    <div class="order-body">
+      <div class="order-num">نقد</div>
+      <label>مبلغ نقدی (لیر)</label>
+      <input type="text" inputmode="numeric" id="pay_cash_tl" value="${d.cashTL!=null?d.cashTL:''}">
+
+      ${d.forex.map((f,i) => `
+        <div style="border-top:1px dashed var(--line);margin-top:10px;padding-top:10px;">
+          <div style="text-align:left;"><button class="danger" style="padding:2px 10px;" onclick="removeForexEntry(${i})">حذف این ارز</button></div>
+          <label>نوع ارز</label>
+          <select class="forex-currency" data-idx="${i}" onchange="onForexCurrencyChange(${i})">
+            ${CURRENCIES.map(c => `<option value="${c.code}" ${f.currency===c.code?'selected':''}>${c.label}</option>`).join('')}
+          </select>
+          <label>مبلغ دریافتی (به همون ارز)</label>
+          <input type="text" inputmode="decimal" class="forex-amount" data-idx="${i}" value="${f.amount!=null?f.amount:''}">
+          <label>نرخ تبدیل به لیر (۱ ${escapeHtml(f.currency||'')} = ؟ TL)</label>
+          <div style="display:flex;gap:8px;">
+            <input type="text" inputmode="decimal" class="forex-rate" data-idx="${i}" value="${f.rate!=null?f.rate:''}" style="flex:1;">
+            <button type="button" onclick="fetchAndApplyRate(${i})" style="background:var(--card2);border:1px solid var(--line);color:var(--text);border-radius:8px;padding:0 12px;white-space:nowrap;">🔄 نرخ روز</button>
+          </div>
+          <div class="order-note" id="forex_status_${i}">${f.rate ? ('معادل تقریبی: ' + fmt(Math.round((Number(f.amount)||0) * (Number(f.rate)||0))) + ' TL') : 'نرخ رو خودکار بگیر یا دستی بزن'}</div>
+        </div>
+      `).join('')}
+      <div class="save-bar" style="margin-top:8px;">
+        <button class="cancel" onclick="addForexEntry()">+ افزودن ارز دیگر (غیر از لیر)</button>
+      </div>
+
+      <label style="margin-top:10px;">مبلغی که بابت باقی به مشتری پس دادی (اختیاری — از هر روش پرداختی که بود)</label>
+      <input type="text" inputmode="numeric" id="pay_change_given" value="${d.changeGiven!=null?d.changeGiven:''}">
+    </div>
+  </div>
+
+  <div class="order" style="background:var(--card);color:var(--text);border:1px solid var(--line);">
+    <div class="order-body">
+      <div class="order-num">واریز به حساب</div>
+      <label>مبلغ واریزی (لیر)</label>
+      <input type="text" inputmode="numeric" id="pay_transfer_tl" value="${d.transfer.amountTL!=null?d.transfer.amountTL:''}">
+      <label>یادداشت (شماره پیگیری، اختیاری)</label>
+      <textarea id="pay_transfer_note">${escapeHtml(d.transfer.note||'')}</textarea>
+      ${photoBlockHtml('transfer', d.transfer, 'عکس فیش واریز (اختیاری)')}
+    </div>
+  </div>
+
+  <div class="order" style="background:var(--card);color:var(--text);border:1px solid var(--line);">
+    <div class="order-body">
+      <div class="order-num">تیپ (جدا از مبلغ سفارش)</div>
+      <div class="order-note" style="color:var(--amber);">این توی محاسبه‌ی اختلاف حساب نمی‌شه.</div>
+      <label>مبلغ تیپ (لیر، اختیاری)</label>
+      <input type="text" inputmode="numeric" id="pay_tip_tl" value="${d.tip!=null?d.tip:''}">
+    </div>
+  </div>
+  `;
+
+  wrap.innerHTML = html;
 }
 
 async function confirmDelivery(){
-  syncPaymentRowsFromDom();
+  syncPaymentDraftFromDom();
   const o = currentOrders.find(x => x.id === payingOrderId);
   if(!o) return;
+  const d = paymentDraft;
 
   const finalPayments = [];
   let tlSum = 0;
-  for(const row of paymentRowsState){
-    if(!row.method){
-      toast('برای همه‌ی ردیف‌ها روش دریافت وجه رو انتخاب کن');
+
+  if(d.online.used){
+    const photo = window._paymentPhotos.online;
+    finalPayments.push({
+      method: 'آنلاین',
+      note: (d.online.note||'').trim(),
+      posPhoto: (photo && photo.base64) || null,
+      posMedia: (photo && photo.media) || null
+    });
+  }
+
+  for(let i=0;i<d.cards.length;i++){
+    const c = d.cards[i];
+    const amt = Number(String(c.amountTL||'').replace(/[^0-9.]/g,'')) || 0;
+    if(amt <= 0) continue;
+    const photo = window._paymentPhotos['card_'+i];
+    finalPayments.push({
+      method: 'کارت',
+      amountTL: amt,
+      posPhoto: (photo && photo.base64) || null,
+      posMedia: (photo && photo.media) || null
+    });
+    tlSum += amt;
+  }
+
+  const cashAmt = Number(String(d.cashTL||'').replace(/[^0-9.]/g,'')) || 0;
+  if(cashAmt > 0){
+    finalPayments.push({ method: 'نقد', amountTL: cashAmt, grossAmountTL: cashAmt });
+    tlSum += cashAmt;
+  }
+
+  for(let i=0;i<d.forex.length;i++){
+    const f = d.forex[i];
+    const amt = Number(String(f.amount||'').replace(/[^0-9.]/g,'')) || 0;
+    if(amt <= 0) continue;
+    const rate = Number(String(f.rate||'').replace(/[^0-9.]/g,'')) || 0;
+    if(rate <= 0){
+      toast('نرخ تبدیل ارز ' + f.currency + ' وارد نشده — نرخ روز رو بگیر یا دستی بزن');
       return;
     }
-    if(row.method === 'نقد' || row.method === 'کارت' || row.method === 'واریز'){
-      const amt = Number(String(row.amountTL || '').replace(/[^0-9.]/g,'')) || 0;
-      if(amt <= 0){ toast('مبلغ یکی از ردیف‌های پرداخت وارد نشده'); return; }
-      const entry = { method: row.method, amountTL: amt };
-      if(row.method === 'واریز') entry.note = (row.note || '').trim();
-      if(row.method === 'کارت' || row.method === 'واریز'){
-        entry.posPhoto = row.posPhoto || null;
-        entry.posMedia = row.posMedia || null;
-      }
-      finalPayments.push(entry);
-      tlSum += amt;
-    } else if(row.method === 'ارز'){
-      const camt = Number(String(row.currencyAmount || '').replace(/[^0-9.]/g,'')) || 0;
-      if(camt <= 0){ toast('مبلغ ارز یکی از ردیف‌ها وارد نشده'); return; }
-      finalPayments.push({
-        method: 'ارز', currency: row.currency || CURRENCIES[0].code, currencyAmount: camt,
-        note: (row.note || '').trim(), posPhoto: row.posPhoto || null, posMedia: row.posMedia || null
-      });
-    } else if(row.method === 'آنلاین'){
-      finalPayments.push({
-        method: 'آنلاین',
-        note: (row.note || '').trim(), posPhoto: row.posPhoto || null, posMedia: row.posMedia || null
-      });
-    } else if(row.method === 'تیپ'){
-      const amt = Number(String(row.amountTL || '').replace(/[^0-9.]/g,'')) || 0;
-      if(amt <= 0){ toast('مبلغ تیپ وارد نشده'); return; }
-      finalPayments.push({ method: 'تیپ', amountTL: amt });
+    const tlEquivalent = Math.round(amt * rate);
+    finalPayments.push({ method: 'ارز', currency: f.currency, currencyAmount: amt, rate: rate, tlEquivalent: tlEquivalent });
+    tlSum += tlEquivalent;
+  }
+
+  const transferAmt = Number(String(d.transfer.amountTL||'').replace(/[^0-9.]/g,'')) || 0;
+  if(transferAmt > 0){
+    const photo = window._paymentPhotos.transfer;
+    finalPayments.push({
+      method: 'واریز',
+      amountTL: transferAmt,
+      note: (d.transfer.note||'').trim(),
+      posPhoto: (photo && photo.base64) || null,
+      posMedia: (photo && photo.media) || null
+    });
+    tlSum += transferAmt;
+  }
+
+  const tipAmt = Number(String(d.tip||'').replace(/[^0-9.]/g,'')) || 0;
+  if(tipAmt > 0){
+    finalPayments.push({ method: 'تیپ', amountTL: tipAmt });
+  }
+
+  const changeAmt = Math.round(Number(String(d.changeGiven||'').replace(/[^0-9.]/g,'')) || 0);
+  if(changeAmt > 0){
+    tlSum -= changeAmt;
+    if(finalPayments.length === 0){
+      toast('اول یه روش پرداخت رو پر کن، بعد مبلغ برگشتی رو بزن');
+      return;
     }
   }
 
-  const hasTLCollectionRow = finalPayments.some(p => p.method === 'نقد' || p.method === 'کارت' || p.method === 'واریز');
+  if(finalPayments.length === 0){
+    toast('حداقل یه روش پرداخت رو پر کن');
+    return;
+  }
+
+  const hasTLCollectionRow = finalPayments.some(p => p.method === 'نقد' || p.method === 'کارت' || p.method === 'واریز' || p.method === 'ارز');
   let mismatch = null;
   if(hasTLCollectionRow && (o.amount || 0) > 0 && Math.abs(tlSum - o.amount) >= 1){
     mismatch = Math.round(tlSum - o.amount);
@@ -2643,6 +2825,7 @@ async function confirmDelivery(){
     payments: finalPayments,
     payment: null,
     paymentMismatch: mismatch,
+    changeGiven: changeAmt || null,
     deliveredAt: new Date().toLocaleTimeString('fa-IR', { hour:'2-digit', minute:'2-digit' }),
     deliveryDurationMin: startedAt ? Math.max(0, Math.round((Date.now() - startedAt) / 60000)) : null
   };
@@ -2678,8 +2861,12 @@ function renderReportSheet(orders, dayKey, isToday, isSingleDay){
       else if(p.method === 'کارت') cardTotal += Number(p.amountTL) || 0;
       else if(p.method === 'واریز') transferTotal += Number(p.amountTL) || 0;
       else if(p.method === 'تیپ') tipTotal += Number(p.amountTL) || 0;
-      else if(p.method === 'ارز') forexTotals[p.currency] = (forexTotals[p.currency]||0) + (Number(p.currencyAmount)||0);
+      else if(p.method === 'ارز'){
+        cashTotal += Number(p.tlEquivalent) || 0;
+        forexTotals[p.currency] = (forexTotals[p.currency]||0) + (Number(p.currencyAmount)||0);
+      }
     });
+    if(o.changeGiven) cashTotal -= Number(o.changeGiven) || 0;
   });
   const durations = delivered.filter(o => o.deliveryDurationMin != null).map(o => o.deliveryDurationMin);
   const avgDuration = durations.length ? Math.round(durations.reduce((s,d) => s+d, 0) / durations.length) : null;
@@ -2732,7 +2919,7 @@ function buildReportText(orders, dayLabel, cashTotal, cardTotal, transferTotal, 
     const payments = getOrderPayments(o);
     const payTxt = payments.length
       ? payments.map(p => {
-          const amtTxt = p.method === 'ارز' ? (fmt(p.currencyAmount) + currencySymbol(p.currency))
+          const amtTxt = p.method === 'ارز' ? (fmt(p.currencyAmount) + currencySymbol(p.currency) + (p.tlEquivalent ? (' (≈'+fmt(p.tlEquivalent)+' TL)') : ''))
             : p.method === 'آنلاین' ? 'قبلاً پرداخت شده'
             : (fmt(p.amountTL) + ' TL');
           return amtTxt + ' [' + p.method + ']';
@@ -2740,8 +2927,9 @@ function buildReportText(orders, dayLabel, cashTotal, cardTotal, transferTotal, 
       : 'در انتظار';
     const mismatch = getOrderMismatch(o);
     const mismatchTxt = mismatch ? ' (اختلاف ' + (mismatch > 0 ? '+' : '') + fmt(mismatch) + ' TL)' : '';
+    const changeTxt = o.changeGiven ? ' | برگشتی: ' + fmt(o.changeGiven) + ' TL' : '';
     const durTxt = o.deliveryDurationMin != null ? ' | ' + o.deliveryDurationMin + ' دقیقه' : '';
-    lines.push((idx+1) + '. ' + (o.name || 'بدون نام') + ' | فیش: ' + fmt(o.amount) + ' TL | دریافتی: ' + payTxt + mismatchTxt + durTxt);
+    lines.push((idx+1) + '. ' + (o.name || 'بدون نام') + ' | فیش: ' + fmt(o.amount) + ' TL | دریافتی: ' + payTxt + mismatchTxt + changeTxt + durTxt);
   });
   lines.push('---');
   lines.push('نقد: ' + fmt(cashTotal) + ' TL');
@@ -2756,9 +2944,12 @@ function buildReportText(orders, dayLabel, cashTotal, cardTotal, transferTotal, 
 function buildExcelRows(orders){
   return orders.map((o, idx) => {
     const payments = getOrderPayments(o);
-    const tlSum = payments.filter(p => p.method !== 'ارز' && p.method !== 'تیپ').reduce((s,p) => s + (Number(p.amountTL)||0), 0);
+    const tlSum = payments.filter(p => p.method !== 'تیپ').reduce((s,p) => {
+      if(p.method === 'ارز') return s + (Number(p.tlEquivalent)||0);
+      return s + (Number(p.amountTL)||0);
+    }, 0) - (Number(o.changeGiven) || 0);
     const tipSum = payments.filter(p => p.method === 'تیپ').reduce((s,p) => s + (Number(p.amountTL)||0), 0);
-    const forexParts = payments.filter(p => p.method === 'ارز').map(p => fmt(p.currencyAmount) + (p.currency||''));
+    const forexParts = payments.filter(p => p.method === 'ارز').map(p => fmt(p.currencyAmount) + (p.currency||'') + (p.tlEquivalent ? (' (≈'+fmt(p.tlEquivalent)+' TL)') : ''));
     const notesParts = payments.filter(p => p.note).map(p => p.note);
     return {
       'ردیف': idx+1,
@@ -2772,6 +2963,7 @@ function buildExcelRows(orders){
       'مبلغ فیش (TL)': Number(o.amount) || 0,
       'روش دریافت': payments.map(p => p.method).join(' + '),
       'مبلغ دریافتی (TL)': tlSum || '',
+      'برگشتی (TL)': o.changeGiven ? fmt(o.changeGiven) : '',
       'تیپ (TL)': tipSum || '',
       'اختلاف با فیش (TL)': getOrderMismatch(o) || '',
       'مبلغ دریافتی (ارز)': forexParts.join(' + '),
@@ -2794,7 +2986,7 @@ function exportExcel(){
   }
   const rows = buildExcelRows(orders);
   const ws = XLSX.utils.json_to_sheet(rows);
-  ws['!cols'] = [{wch:5},{wch:9},{wch:9},{wch:11},{wch:11},{wch:16},{wch:30},{wch:14},{wch:12},{wch:14},{wch:12},{wch:9},{wch:12},{wch:16},{wch:20},{wch:13},{wch:12},{wch:34},{wch:28},{wch:20}];
+  ws['!cols'] = [{wch:5},{wch:9},{wch:9},{wch:11},{wch:11},{wch:16},{wch:30},{wch:14},{wch:12},{wch:14},{wch:12},{wch:11},{wch:9},{wch:12},{wch:16},{wch:20},{wch:13},{wch:12},{wch:34},{wch:28},{wch:20}];
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'گزارش');
   XLSX.writeFile(wb, 'peyk-report-' + dayLabel + '.xlsx');
