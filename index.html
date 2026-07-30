@@ -190,9 +190,8 @@ textarea{min-height:64px;resize:vertical;}
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-<script src="https://unpkg.com/tesseract.js@v5.1.1/dist/tesseract.min.js"></script>
 <script>
-const APP_VERSION = 'v4.3 · 2026-07-30';
+const APP_VERSION = 'v4.5 · 2026-07-30';
 const STORAGE_KEY_PREFIX = 'orders:';
 const CURRENCIES = [
   { code:'GBP', label:'پوند (GBP)', symbol:'£' },
@@ -789,7 +788,23 @@ function saveLocationForm(id){
     const idx = list.findIndex(l => l.id === id);
     if(idx > -1) list[idx] = { ...list[idx], name, address, mapLink: mapLink || list[idx].mapLink || null };
   } else {
-    list.push({ id: 'loc_' + Date.now() + '_' + Math.random().toString(36).slice(2,7), name, address, mapLink });
+    const normAddr = address.trim().toLowerCase();
+    const existingMatch = list.find(l =>
+      (l.address || '').trim().toLowerCase() === normAddr ||
+      (mapLink && l.mapLink && l.mapLink === mapLink)
+    );
+    if(existingMatch){
+      const oldNameWasPlaceholder = /^لوکیشن /.test(existingMatch.name || '');
+      const newNameIsReal = !/^لوکیشن /.test(name);
+      if(oldNameWasPlaceholder && newNameIsReal){
+        existingMatch.name = name;
+      }
+      existingMatch.address = address;
+      if(mapLink) existingMatch.mapLink = mapLink;
+      toast('این آدرس از قبل توی لیست بود — به‌جای تکراری، بروزرسانی شد');
+    } else {
+      list.push({ id: 'loc_' + Date.now() + '_' + Math.random().toString(36).slice(2,7), name, address, mapLink });
+    }
   }
   setSavedLocations(list);
   closeLocationForm();
@@ -1783,17 +1798,10 @@ function openOrderModal(existing){
         <div id="photoPreviewWrap"></div>
         <div class="qr-link-status" id="qrLinkStatus" style="font-size:12px;color:${capturedQrLink ? 'var(--teal)' : 'var(--muted)'};margin-bottom:8px;">${capturedQrLink ? 'لینک نقشه ثبت شده ✓' : 'هنوز لینک نقشه از QR اسکن نشده'}</div>
         <div class="photo-btns">
-          <button class="ai" onclick="startQrScanner(applyScannedMapLink)">📷 اسکن زنده QR (برای نقشه)</button>
-        </div>
-        <div class="photo-btns" style="margin-top:8px;">
-          <button onclick="document.getElementById('cameraInput').click()">دوربین</button>
           <button onclick="document.getElementById('galleryInput').click()">از گالری</button>
-          <button onclick="pastePhotoFromClipboard()">چسباندن عکس</button>
-          <button id="offlineBtn" disabled onclick="runOfflineOcr()">خواندن آفلاین</button>
           ${getGeminiKey() ? `<button class="ai" id="geminiBtn" disabled onclick="runGeminiExtract()">خواندن با Gemini (رایگان)</button>` : ''}
           ${getApiKey() ? `<button id="aiBtn" disabled onclick="runAiExtract()">خواندن با کلود</button>` : ''}
         </div>
-        <input type="file" id="cameraInput" class="hidden-file-input" accept="image/*" capture="environment" onchange="onPhotoSelected(event)">
         <input type="file" id="galleryInput" class="hidden-file-input" accept="image/*" onchange="onPhotoSelected(event)">
         <div class="ai-status" id="aiStatus"></div>
         ${getGeminiKey() ? '' : `<div class="order-note" style="margin-top:8px;">دقت‌ت رو با یه کلید رایگان Gemini بالا ببر. <span style="text-decoration:underline;cursor:pointer;color:var(--amber);" onclick="openSettings()">فعال کردن Gemini (رایگان)</span></div>`}
@@ -1802,48 +1810,43 @@ function openOrderModal(existing){
       <label>نام مشتری</label>
       <input type="text" id="f_name" value="${escapeHtml(o.name||'')}" oninput="scheduleDraftSave()">
 
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:12px;">
-        <label style="margin:0;">آدرس</label>
-        <button type="button" onclick="pasteAddress()" style="background:var(--card2);border:1px solid var(--line);color:var(--amber);font-size:11.5px;padding:5px 10px;border-radius:8px;font-family:inherit;">چسباندن از کلیپ‌بورد</button>
-      </div>
+      <label style="margin-top:12px;">آدرس</label>
       <textarea id="f_address" style="margin-top:5px;" oninput="scheduleDraftSave();checkCaesarBlockMatch()">${escapeHtml(o.address||'')}</textarea>
       <div id="caesarMatchBanner"></div>
       <div style="display:flex;gap:8px;margin-top:6px;flex-wrap:wrap;">
         <button type="button" onclick="pickLocationForOrder()" style="background:var(--card2);border:1px solid var(--line);color:var(--text);font-size:11.5px;padding:6px 10px;border-radius:8px;font-family:inherit;">📍 انتخاب از لوکیشن‌های ذخیره‌شده</button>
         <button type="button" onclick="saveCurrentAddressAsLocation()" style="background:var(--card2);border:1px solid var(--line);color:var(--text);font-size:11.5px;padding:6px 10px;border-radius:8px;font-family:inherit;">💾 ذخیره این آدرس برای بعد</button>
       </div>
-      <div style="text-align:left;margin-top:5px;">
-        <button type="button" onclick="openMap(capturedQrLink || document.getElementById('f_address').value)" style="background:none;border:none;color:var(--muted);font-size:11.5px;font-family:inherit;text-decoration:underline;">نمایش نقشه (لینک QR یا آدرس)</button>
+      <div style="display:flex;gap:8px;margin-top:6px;flex-wrap:wrap;">
+        <button type="button" onclick="openGoogleMapsExplicit(capturedQrLink || document.getElementById('f_address').value)" style="background:var(--card2);border:1px solid var(--line);color:var(--text);font-size:11.5px;padding:6px 10px;border-radius:8px;font-family:inherit;">🗺️ گوگل‌مپ</button>
+        <button type="button" onclick="openWaze(capturedQrLink || document.getElementById('f_address').value)" style="background:var(--card2);border:1px solid var(--line);color:var(--text);font-size:11.5px;padding:6px 10px;border-radius:8px;font-family:inherit;">🧭 Waze</button>
       </div>
 
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:12px;">
-        <label style="margin:0;">تلفن</label>
-        <button type="button" onclick="pastePhone()" style="background:var(--card2);border:1px solid var(--line);color:var(--amber);font-size:11.5px;padding:5px 10px;border-radius:8px;font-family:inherit;">چسباندن</button>
-      </div>
+      <label style="margin-top:12px;">تلفن</label>
       <input type="tel" id="f_phone" style="margin-top:5px;" value="${escapeHtml(o.phone||'')}" oninput="showDuplicateWarning(findDuplicateOrder());scheduleDraftSave();scheduleCustomerCheck()">
+      <div style="display:flex;gap:8px;margin-top:6px;flex-wrap:wrap;">
+        <button type="button" onclick="callCustomer()" style="background:var(--card2);border:1px solid var(--line);color:var(--text);font-size:11.5px;padding:6px 10px;border-radius:8px;font-family:inherit;">📞 تماس مستقیم</button>
+        <button type="button" onclick="whatsappCustomer()" style="background:var(--card2);border:1px solid var(--line);color:var(--text);font-size:11.5px;padding:6px 10px;border-radius:8px;font-family:inherit;">💬 واتساپ</button>
+      </div>
       <div id="customerMatchBanner"></div>
 
-      <label>مبلغ سفارش (لیر)</label>
-      <input type="text" inputmode="numeric" id="f_amount" value="${o.amount||''}" oninput="showDuplicateWarning(findDuplicateOrder());scheduleDraftSave()">
-
-      <label>منبع سفارش</label>
+      <label style="margin-top:12px;">منبع سفارش</label>
       <div class="chip-group" id="srcGroup">
         <button type="button" class="chip" data-val="Feed Me">Feed Me</button>
         <button type="button" class="chip" data-val="تلفن رستوران">تلفن رستوران</button>
       </div>
 
-      <label>یادداشت (اختیاری)</label>
-      <textarea id="f_notes" oninput="scheduleDraftSave()">${escapeHtml(o.notes||'')}</textarea>
+      <label style="margin-top:12px;">شماره سفارش (اختیاری)</label>
+      <input type="text" id="f_orderno" value="${escapeHtml(o.orderNo||'')}" oninput="showDuplicateWarning(findDuplicateOrder());scheduleDraftSave()">
 
-      <details class="loc-subgroup" id="moreDetailsSection" style="margin:14px 0;"${(o.orderNo || o.items) ? ' open' : ''}>
-        <summary>جزئیات بیشتر (شماره سفارش، اقلام) — اختیاری</summary>
-        <div style="padding:2px 10px 10px;">
-          <label>شماره سفارش (اختیاری)</label>
-          <input type="text" id="f_orderno" value="${escapeHtml(o.orderNo||'')}" oninput="showDuplicateWarning(findDuplicateOrder());scheduleDraftSave()">
-          <label>جزئیات کامل سفارش (اقلام و قیمت‌ها)</label>
-          <textarea id="f_items" style="min-height:90px;" oninput="scheduleDraftSave()">${escapeHtml(o.items||'')}</textarea>
-        </div>
-      </details>
+      <label style="margin-top:12px;">جزئیات سفارش (اقلام و قیمت‌ها)</label>
+      <textarea id="f_items" style="min-height:90px;" oninput="scheduleDraftSave()">${escapeHtml(o.items||'')}</textarea>
+
+      <label style="margin-top:12px;">مبلغ کل سفارش (لیر)</label>
+      <input type="text" inputmode="numeric" id="f_amount" value="${o.amount||''}" oninput="showDuplicateWarning(findDuplicateOrder());scheduleDraftSave()">
+
+      <label style="margin-top:12px;">یادداشت (اختیاری)</label>
+      <textarea id="f_notes" oninput="scheduleDraftSave()">${escapeHtml(o.notes||'')}</textarea>
 
       <div id="dupWarning" class="dup-warning" style="display:none;"></div>
 
@@ -1969,37 +1972,10 @@ async function loadPhotoFromBlob(blob){
     if(aiBtnEl) aiBtnEl.disabled = false;
     const geminiBtnEl = document.getElementById('geminiBtn');
     if(geminiBtnEl) geminiBtnEl.disabled = false;
-    document.getElementById('offlineBtn').disabled = false;
     decodeQrFromImage(finalDataUrl);
     showDuplicateWarning(findDuplicateOrder());
   };
   reader.readAsDataURL(blob);
-}
-
-async function pastePhotoFromClipboard(){
-  if(!navigator.clipboard || !navigator.clipboard.read){
-    toast('این مرورگر از چسباندن عکس پشتیبانی نمی‌کنه، از دوربین یا گالری استفاده کن');
-    return;
-  }
-  try{
-    const items = await navigator.clipboard.read();
-    let found = null;
-    for(const item of items){
-      const imgType = item.types.find(t => t.startsWith('image/'));
-      if(imgType){
-        found = await item.getType(imgType);
-        break;
-      }
-    }
-    if(!found){
-      toast('عکسی توی کلیپ‌بورد پیدا نشد، اول عکس رو کپی کن');
-      return;
-    }
-    loadPhotoFromBlob(found);
-    toast('عکس چسبانده شد');
-  }catch(e){
-    toast('اجازه دسترسی به کلیپ‌بورد داده نشد');
-  }
 }
 
 function onPhotoSelected(evt){
@@ -2028,33 +2004,6 @@ function decodeQrFromImage(dataUrl){
     }
   };
   img.src = dataUrl;
-}
-
-async function pasteAddress(){
-  try{
-    const text = await navigator.clipboard.readText();
-    if(!text){ toast('کلیپ‌بورد خالیه'); return; }
-    const field = document.getElementById('f_address');
-    field.value = field.value ? (field.value + '\n' + text.trim()) : text.trim();
-    if(/https?:\/\/\S+|(-?\d{1,3}\.\d{3,})\s*,\s*(-?\d{1,3}\.\d{3,})/.test(text)){
-      toast('لوکیشن شناسایی شد، دکمه نقشه رو بزن');
-    } else {
-      toast('چسبانده شد');
-    }
-  }catch(e){
-    toast('اجازه دسترسی به کلیپ‌بورد داده نشد');
-  }
-}
-
-async function pastePhone(){
-  try{
-    const text = await navigator.clipboard.readText();
-    if(!text){ toast('کلیپ‌بورد خالیه'); return; }
-    document.getElementById('f_phone').value = text.trim();
-    toast('چسبانده شد');
-  }catch(e){
-    toast('اجازه دسترسی به کلیپ‌بورد داده نشد');
-  }
 }
 
 function extractLatLngFromMapLink(link){
@@ -2147,6 +2096,28 @@ function openGoogleMapsExplicit(address){
   window.open(url, '_blank');
 }
 
+function normalizePhoneForDialing(phone){
+  let digits = String(phone || '').replace(/\D/g, '');
+  if(!digits) return null;
+  if(digits.startsWith('0')) digits = '90' + digits.slice(1);
+  else if(digits.length === 10 && !digits.startsWith('90')) digits = '90' + digits;
+  return digits;
+}
+
+function callCustomer(){
+  const phone = (document.getElementById('f_phone') || {}).value || '';
+  const digits = normalizePhoneForDialing(phone);
+  if(!digits){ toast('شماره تلفنی وارد نشده'); return; }
+  window.location.href = 'tel:+' + digits;
+}
+
+function whatsappCustomer(){
+  const phone = (document.getElementById('f_phone') || {}).value || '';
+  const digits = normalizePhoneForDialing(phone);
+  if(!digits){ toast('شماره تلفنی وارد نشده'); return; }
+  window.open('https://wa.me/' + digits, '_blank');
+}
+
 function openWaze(address){
   const url = wazeUrlFor(address);
   if(!url){ toast('آدرسی برای این سفارش ثبت نشده'); return; }
@@ -2161,126 +2132,23 @@ function openMap(address){
   openGoogleMapsExplicit(address);
 }
 
-async function runOfflineOcr(){
-  if(!capturedImageBase64) return;
-  const statusEl = document.getElementById('aiStatus');
-  const offlineBtn = document.getElementById('offlineBtn');
-  if(typeof Tesseract === 'undefined'){
-    statusEl.textContent = 'کتابخانه خواندن آفلاین بارگذاری نشد، اینترنتت رو چک کن.';
-    return;
-  }
-  offlineBtn.disabled = true;
-  statusEl.textContent = 'در حال خواندن آفلاین... (ممکنه ۵ تا ۱۵ ثانیه طول بکشه)';
-
-  try{
-    const dataUrl = 'data:' + capturedImageMedia + ';base64,' + capturedImageBase64;
-    const result = await Tesseract.recognize(dataUrl, 'eng');
-    const rawText = result && result.data ? result.data.text : '';
-    const parsed = parseReceiptText(rawText);
-
-    if(parsed.name) document.getElementById('f_name').value = parsed.name;
-    if(parsed.address) document.getElementById('f_address').value = parsed.address;
-    if(parsed.phone) document.getElementById('f_phone').value = parsed.phone;
-    if(parsed.amount) document.getElementById('f_amount').value = parsed.amount;
-    if(parsed.orderNo) document.getElementById('f_orderno').value = parsed.orderNo;
-    if((parsed.orderNo || parsed.items) && document.getElementById('moreDetailsSection')) document.getElementById('moreDetailsSection').open = true;
-    if(parsed.orderTime){
-      const mins = timeStringToMinutes(parsed.orderTime);
-      if(mins != null) capturedReceiptTime = mins;
-    }
-    if(parsed.source){
-      document.querySelectorAll('#srcGroup .chip').forEach(b=>{
-        b.classList.toggle('active', b.dataset.val === parsed.source);
-      });
-    }
-    statusEl.innerHTML = 'خونده شد (روش آفلاین دقت کمتری داره) — ' + (parsed.foundCount) + ' مورد پیدا شد. حتماً بررسی کن.';
-    showDuplicateWarning(findDuplicateOrder());
-    checkCaesarBlockMatch();
-    scheduleCustomerCheck();
-  }catch(e){
-    statusEl.textContent = 'خطا در خواندن آفلاین، دستی وارد کن یا از حالت هوش مصنوعی استفاده کن.';
-  }
-  offlineBtn.disabled = false;
-}
-
-function parseReceiptText(text){
-  const out = { name:'', address:'', phone:'', amount:'', orderNo:'', source:'', orderTime:'', foundCount:0 };
-  if(!text) return out;
-  const norm = text.replace(/\r/g,'');
-  const lines = norm.split('\n').map(l => l.trim()).filter(Boolean);
-  const lower = norm.toLowerCase();
-
-  const feedMeTimeMatch = norm.match(/Sip\.?\s*Zaman[ıi][:\s]*[\d.]+\s*\((\d{1,2}:\d{2})\)/i);
-  const rioverdeTimeMatch = norm.match(/SAAT[:\s]*(\d{1,2}:\d{2})/i);
-  const timeMatch = feedMeTimeMatch || rioverdeTimeMatch;
-  if(timeMatch){ out.orderTime = timeMatch[1]; out.foundCount++; }
-
-  if(lower.includes('feed me') || lower.includes('sushinn')){
-    out.source = 'Feed Me';
-  } else if(lower.includes('rioverde') || lower.includes('masa') || lower.includes('garson')){
-    out.source = 'تلفن رستوران';
-  }
-
-  const phoneMatch = norm.match(/Telefon[:\s]*([+\d][\d\s()+-]{7,20})/i);
-  if(phoneMatch){ out.phone = phoneMatch[1].replace(/\s+/g,' ').trim(); out.foundCount++; }
-
-  const orderNoMatch = norm.match(/Sip\.?\s*No[:\s]*([A-Za-z0-9]{4,10})/i);
-  if(orderNoMatch){ out.orderNo = orderNoMatch[1].trim(); out.foundCount++; }
-
-  const faturaMatch = norm.match(/Fatura[:\s]*([\d.,]+)\s*TL/i);
-  const kalanMatch = norm.match(/Kalan\s*Odeme\D{0,10}([\d.,]+)/i);
-  const amtMatch = faturaMatch || kalanMatch;
-  if(amtMatch){
-    const raw = amtMatch[1].trim();
-    const num = raw.includes(',') ? raw.replace(/\./g,'').replace(',', '.') : raw;
-    out.amount = Math.round(parseFloat(num)) || '';
-    if(out.amount) out.foundCount++;
-  }
-
-  const adresIdx = lines.findIndex(l => /^Adres/i.test(l));
-  if(adresIdx > -1){
-    let addrLines = [lines[adresIdx].replace(/^Adres[:\s]*/i,'')];
-    for(let i=adresIdx+1;i<lines.length && i<adresIdx+5;i++){
-      if(/Ürün|Urun|Fatura|Not:|Ödeme|Odeme|Feed Me/i.test(lines[i])) break;
-      addrLines.push(lines[i]);
-    }
-    out.address = addrLines.join(' ').trim();
-    if(out.address) out.foundCount++;
-  }
-
-  const telIdx = lines.findIndex(l => /^Telefon/i.test(l));
-  if(telIdx > 0){
-    const candidate = lines[telIdx-1];
-    if(candidate && !/^-+$/.test(candidate) && candidate.length < 40){
-      out.name = candidate;
-      out.foundCount++;
-    }
-  }
-
-  if(!out.name){
-    const masaMatch = norm.match(/MASA\s*[:\s]*(\d+)/i);
-    if(masaMatch){
-      out.name = 'Masa ' + masaMatch[1];
-      out.foundCount++;
-    }
-  }
-
-  return out;
-}
-
 function buildReceiptPrompt(){
   const qrNote = capturedQrLink ? `\nیک لینک از QR کد این رسید خونده شده: "${capturedQrLink}" — اگر این لینک آدرس گوگل مپ بود، همون رو به عنوان لینک نقشه در نظر بگیر و توی فیلد address هم آدرس خوانا (متنی) رو از روی خود رسید بنویس، نه لینک رو.` : '';
   const phoneNote = `\nمهم: در انتهای رسیدهای "Feed Me" همیشه دو شماره ثابت خود رستوران به عنوان اطلاعات تماس چاپ شده (چیزی شبیه +90 (539) 124 66 24 و +90 (539) 122 66 24). این‌ها شماره مشتری نیستن، اصلاً در فیلد phone نذارشون. شماره واقعی مشتری همیشه بلافاصله زیر "Telefon:" و بالای بخش "Adres:" نوشته شده، همون رو بردار.`;
   const masaNote = `\nمهم: رسیدهای داخلی "RIOVERDE" اسم مشتری ندارن، فقط یه شماره "MASA" دارن (مثلاً MASA :413). برای این نوع رسید، فیلد name رو اینطوری بساز: "Masa " + همون عدد (مثلاً "Masa 413") — نه خالی بذار، نه چیز دیگه‌ای بنویس.`;
   const timeNote = `\nمهم: ساعت واقعی سفارش رو هم پیدا کن — توی رسیدهای Feed Me جلوی "Sip. Zamanı:" داخل پرانتز (مثلاً 17.07.2026 (21:22) یعنی ساعت 21:22)، توی رسیدهای RIOVERDE جلوی "SAAT:" (مثلاً SAAT:20:40:00 یعنی ساعت 20:40). این ساعت رو دقیقاً به فرمت HH:MM برگردون، نه ساعتی که الان هست.`;
-  return `این عکس یک رسید سفارش رستوران سوشی (به ترکی) است. دو نوع رسید ممکن است باشد: رسیدهای "Feed Me" که شامل نام مشتری، Telefon، Adres، Ürün و Fatura (مبلغ نهایی) است، یا رسید داخلی رستوران "RIOVERDE" که شامل Genel Toplam / Kalan Odeme به عنوان مبلغ نهایی است و ممکن است شماره تلفن یا آدرس با خط دست روی آن نوشته شده باشد.${qrNote}${phoneNote}${masaNote}${timeNote}
+  const receiptCheckNote = `\nمهم: اول بررسی کن این عکس اصلاً یه رسید سفارش رستوران (Feed Me یا RIOVERDE) هست یا نه. اگه این عکس چیز دیگه‌ایه (مثلاً سلفی، عکس خیابون، صفحه‌ی گوشی، یا هر چیز نامرتبط دیگه)، فیلد isReceipt رو false بذار و بقیه‌ی فیلدها رو خالی بذار — هیچی حدس نزن.`;
+  return `این عکس یک رسید سفارش رستوران سوشی (به ترکی) است. دو نوع رسید ممکن است باشد: رسیدهای "Feed Me" که شامل نام مشتری، Telefon، Adres، Ürün و Fatura (مبلغ نهایی) است، یا رسید داخلی رستوران "RIOVERDE" که شامل Genel Toplam / Kalan Odeme به عنوان مبلغ نهایی است و ممکن است شماره تلفن یا آدرس با خط دست روی آن نوشته شده باشد.${receiptCheckNote}${qrNote}${phoneNote}${masaNote}${timeNote}
 نوع پرداخت را استخراج نکن، چون قابل اعتماد نیست و بعداً موقع تحویل توسط پیک ثبت می‌شود.
 اطلاعات زیر را استخراج کن و فقط یک JSON خام (بدون توضیح، بدون markdown) با این کلیدها برگردان:
-{"name": "نام مشتری، یا برای RIOVERDE: Masa <شماره میز>", "address": "آدرس کامل، اگر جمله‌ای در متن تکرار شده حذفش کن و فقط یک بار بنویس", "phone": "شماره تلفن مشتری یا خالی", "amount": عدد مبلغ نهایی قابل پرداخت بدون واحد, "source": "Feed Me یا تلفن رستوران", "notes": "نکات خاص سفارش مثل بدون قارچ یا سس اضافه، خیلی کوتاه", "orderNo": "شماره سفارش (Sip. No) یا خالی", "items": "لیست کامل اقلام سفارش با تعداد و قیمت هرکدوم، خط به خط، دقیقا مطابق رسید", "orderTime": "ساعت سفارش به فرمت HH:MM از روی خود رسید، یا خالی اگه پیدا نشد"}
+{"isReceipt": true یا false, "name": "نام مشتری، یا برای RIOVERDE: Masa <شماره میز>", "address": "آدرس کامل، اگر جمله‌ای در متن تکرار شده حذفش کن و فقط یک بار بنویس", "phone": "شماره تلفن مشتری یا خالی", "amount": عدد مبلغ نهایی قابل پرداخت بدون واحد, "source": "Feed Me یا تلفن رستوران", "notes": "نکات خاص سفارش مثل بدون قارچ یا سس اضافه، خیلی کوتاه", "orderNo": "شماره سفارش (Sip. No) یا خالی", "items": "لیست کامل اقلام سفارش با تعداد و قیمت هرکدوم، خط به خط، دقیقا مطابق رسید", "orderTime": "ساعت سفارش به فرمت HH:MM از روی خود رسید، یا خالی اگه پیدا نشد"}
 اگر مبلغی به صورت دست‌نویس یا در پایین رسید نوشته شده (مثل Yalnız ... 'dir) همان را به عنوان مبلغ نهایی در نظر بگیر. آدرس یا تلفن دست‌نویس را هم اگر بود لحاظ کن. فقط JSON خام برگردان.`;
 }
 
 function applyExtractedFields(parsed){
+  if(parsed.isReceipt === false){
+    return false;
+  }
   if(parsed.orderTime){
     const mins = timeStringToMinutes(parsed.orderTime);
     if(mins != null) capturedReceiptTime = mins;
@@ -2292,7 +2160,6 @@ function applyExtractedFields(parsed){
   if(parsed.notes) document.getElementById('f_notes').value = parsed.notes;
   if(parsed.orderNo) document.getElementById('f_orderno').value = parsed.orderNo;
   if(parsed.items) document.getElementById('f_items').value = parsed.items;
-  if((parsed.orderNo || parsed.items) && document.getElementById('moreDetailsSection')) document.getElementById('moreDetailsSection').open = true;
   if(parsed.source){
     document.querySelectorAll('#srcGroup .chip').forEach(b=>{
       b.classList.toggle('active', b.dataset.val === parsed.source);
@@ -2301,11 +2168,13 @@ function applyExtractedFields(parsed){
   showDuplicateWarning(findDuplicateOrder());
   checkCaesarBlockMatch();
   scheduleCustomerCheck();
+  return true;
 }
 
 const GEMINI_SCHEMA = {
   type: "OBJECT",
   properties: {
+    isReceipt: { type: "BOOLEAN" },
     name: { type: "STRING" },
     address: { type: "STRING" },
     phone: { type: "STRING" },
@@ -2329,7 +2198,7 @@ async function runGeminiExtract(){
     return;
   }
 
-  btn.disabled = true;
+  if(btn) btn.disabled = true;
   statusEl.textContent = 'در حال خواندن با Gemini...';
 
   try{
@@ -2365,7 +2234,7 @@ async function runGeminiExtract(){
       } else {
         statusEl.textContent = 'خطا در سرور Gemini (' + response.status + ')، دستی وارد کن.';
       }
-      btn.disabled = false;
+      if(btn) btn.disabled = false;
       return;
     }
 
@@ -2374,12 +2243,12 @@ async function runGeminiExtract(){
       data.candidates[0].content.parts && data.candidates[0].content.parts[0] ?
       data.candidates[0].content.parts[0].text : '';
     const parsed = JSON.parse(rawText);
-    applyExtractedFields(parsed);
-    statusEl.textContent = 'خونده شد (Gemini، رایگان)، لطفا بررسی و تایید کن.';
+    const ok = applyExtractedFields(parsed);
+    statusEl.textContent = ok ? 'خونده شد (Gemini، رایگان)، لطفا بررسی و تایید کن.' : '⚠ این عکس فیش سفارش به نظر نمی‌رسه — عکس دیگه‌ای امتحان کن یا دستی وارد کن.';
   }catch(e){
     statusEl.textContent = 'خطا در اتصال (اینترنت رو چک کن)، دستی وارد کن.';
   }
-  btn.disabled = false;
+  if(btn) btn.disabled = false;
 }
 
 async function runAiExtract(){
@@ -2435,14 +2304,14 @@ async function runAiExtract(){
     let raw = textBlock ? textBlock.text : '';
     raw = raw.replace(/```json|```/g, '').trim();
     const parsed = JSON.parse(raw);
-    applyExtractedFields(parsed);
+    const ok = applyExtractedFields(parsed);
 
     let usageNote = '';
     if(data.usage){
       const stats = addUsage(data.usage.input_tokens, data.usage.output_tokens);
       usageNote = ' (مصرف تا الان: $' + stats.costUSD.toFixed(3) + ')';
     }
-    statusEl.textContent = 'خونده شد، لطفا بررسی و تایید کن.' + usageNote;
+    statusEl.textContent = ok ? ('خونده شد، لطفا بررسی و تایید کن.' + usageNote) : '⚠ این عکس فیش سفارش به نظر نمی‌رسه — عکس دیگه‌ای امتحان کن یا دستی وارد کن.';
   }catch(e){
     statusEl.textContent = 'خطا در اتصال (اینترنت رو چک کن)، دستی وارد کن.';
   }
