@@ -193,7 +193,7 @@ textarea{min-height:64px;resize:vertical;}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script>
-const APP_VERSION = 'v4.9 · 2026-07-31';
+const APP_VERSION = 'v5.0 · 2026-07-31';
 const STORAGE_KEY_PREFIX = 'orders:';
 const CURRENCIES = [
   { code:'GBP', label:'پوند (GBP)', symbol:'£' },
@@ -301,37 +301,50 @@ function scheduleCustomerCheck(){
   customerCheckTimer = setTimeout(checkReturningCustomer, 500);
 }
 
+function textSimilarity(a, b){
+  const normalize = (s) => (s||'').toLowerCase().replace(/[^\p{L}\p{N}\s]/gu, ' ').split(/\s+/).filter(w => w.length > 1);
+  const wordsA = normalize(a);
+  const wordsB = normalize(b);
+  if(wordsA.length === 0 || wordsB.length === 0) return 0;
+  const setA = new Set(wordsA);
+  const setB = new Set(wordsB);
+  let common = 0;
+  setA.forEach(w => { if(setB.has(w)) common++; });
+  return common / Math.max(setA.size, setB.size);
+}
+
 async function checkReturningCustomer(){
   const banner = document.getElementById('customerMatchBanner');
   if(!banner) return;
-  const phoneField = document.getElementById('f_phone');
-  const phone = phoneField ? phoneField.value : '';
-  const history = await getCustomerAddressHistory(phone);
+  const name = (document.getElementById('f_name') || {}).value || '';
+  const phone = (document.getElementById('f_phone') || {}).value || '';
+  const address = (document.getElementById('f_address') || {}).value || '';
+
+  const matches = await findMatchingHistoryEntries(name, phone, address);
   if(!document.getElementById('customerMatchBanner')) return; // form may have closed while awaiting
 
-  if(history.length === 0){
+  if(matches.length === 0){
     banner.innerHTML = '';
     return;
   }
-  const currentAddr = ((document.getElementById('f_address')||{}).value || '').trim().toLowerCase();
-  if(history.length === 1 && history[0].address.trim().toLowerCase() === currentAddr){
+  if(matches.length === 1 && textSimilarity(matches[0].address, address) >= 0.85){
     banner.innerHTML = '';
-    return;
+    return; // already basically matches what's typed, nothing to suggest
   }
 
-  window._customerAddrOptions = history;
-  if(history.length === 1){
-    const h = history[0];
-    banner.innerHTML = `<div class="order-note" style="margin-top:6px;color:var(--teal);">📇 مشتری قبلی شناسایی شد (بر اساس تلفن) — آخرین آدرس ثبت‌شده (${escapeHtml(h.date)}): «${escapeHtml(h.address)}»
+  window._customerAddrOptions = matches;
+  if(matches.length === 1){
+    const h = matches[0];
+    banner.innerHTML = `<div class="order-note" style="margin-top:6px;color:var(--teal);">🔁 این شبیه یه سفارش قبلیه (${escapeHtml(h.name || 'بدون نام')} — ${escapeHtml(h.date)}) — آدرس ثبت‌شده: «${escapeHtml(h.address)}»
       <div style="margin-top:4px;">
-        <span style="text-decoration:underline;cursor:pointer;color:var(--amber);" onclick="applyCustomerAddress(0)">همین آدرسه، اعمال کن</span>
+        <span style="text-decoration:underline;cursor:pointer;color:var(--amber);" onclick="applyCustomerAddress(0)">همینه، اعمال کن</span>
         &nbsp;|&nbsp;
-        <span style="text-decoration:underline;cursor:pointer;color:var(--muted);" onclick="dismissCustomerMatch()">نه، آدرس جدیده — دستی وارد می‌کنم</span>
+        <span style="text-decoration:underline;cursor:pointer;color:var(--muted);" onclick="dismissCustomerMatch()">نه، جدیده — دستی وارد می‌کنم</span>
       </div></div>`;
   } else {
-    banner.innerHTML = `<div class="order-note" style="margin-top:6px;color:var(--teal);">📇 این مشتری (بر اساس تلفن) قبلاً به ${history.length} آدرس مختلف سفارش داده — مطمئن شو کدومه:</div>` +
-      history.map((h,i) => `<div class="order-note" style="margin-top:4px;cursor:pointer;text-decoration:underline;color:var(--amber);" onclick="applyCustomerAddress(${i})">📍 ${escapeHtml(h.address)} <span style="color:var(--muted);">(${escapeHtml(h.date)})</span></div>`).join('') +
-      `<div class="order-note" style="margin-top:4px;cursor:pointer;text-decoration:underline;color:var(--muted);" onclick="dismissCustomerMatch()">هیچ‌کدوم، آدرس جدیده — دستی وارد می‌کنم</div>`;
+    banner.innerHTML = `<div class="order-note" style="margin-top:6px;color:var(--teal);">🔁 چند سفارش قبلیِ شبیه این پیدا شد — مطمئن شو کدومه:</div>` +
+      matches.map((h,i) => `<div class="order-note" style="margin-top:4px;cursor:pointer;text-decoration:underline;color:var(--amber);" onclick="applyCustomerAddress(${i})">📍 ${escapeHtml(h.address)} <span style="color:var(--muted);">(${escapeHtml(h.name||'بدون نام')} — ${escapeHtml(h.date)})</span></div>`).join('') +
+      `<div class="order-note" style="margin-top:4px;cursor:pointer;text-decoration:underline;color:var(--muted);" onclick="dismissCustomerMatch()">هیچ‌کدوم، جدیده — دستی وارد می‌کنم</div>`;
   }
 }
 
@@ -347,7 +360,7 @@ function applyCustomerAddress(idx){
   }
   const nameField = document.getElementById('f_name');
   if(h.name && nameField && !nameField.value.trim()) nameField.value = h.name;
-  toast('آدرس مشتری قبلی اعمال شد');
+  toast('آدرس سفارش قبلی اعمال شد');
   const banner = document.getElementById('customerMatchBanner');
   if(banner) banner.innerHTML = '';
   checkCaesarBlockMatch();
@@ -909,16 +922,6 @@ function applyPickedLocation(id){
   toast('لوکیشن اعمال شد');
 }
 
-function saveCurrentAddressAsLocation(){
-  const address = (document.getElementById('f_address') || {}).value || '';
-  if(!address.trim()){
-    toast('اول آدرس رو وارد کن');
-    return;
-  }
-  const name = (document.getElementById('f_name') || {}).value || '';
-  openLocationForm(null, { name, address, mapLink: capturedQrLink || null });
-}
-
 function openSettings(){
   const root = document.getElementById('modalRoot');
   const key = getApiKey();
@@ -1367,10 +1370,15 @@ function isRestaurantPhone(p){
   return RESTAURANT_PHONE_BLACKLIST.some(bl => n.endsWith(bl) || bl.endsWith(n));
 }
 
-async function getCustomerAddressHistory(phone){
+async function findMatchingHistoryEntries(name, phone, address){
   const normPhone = normalizePhone(phone);
-  if(!normPhone || normPhone.length < 6 || isRestaurantPhone(phone)) return [];
-  const results = [];
+  const hasPhone = !!(normPhone && normPhone.length >= 6 && !isRestaurantPhone(phone));
+  const normName = (name || '').trim().toLowerCase();
+  const hasName = normName.length >= 2;
+  const hasAddress = (address || '').trim().length >= 4;
+  if(!hasPhone && !hasName && !hasAddress) return [];
+
+  const candidates = [];
   try{
     const listRes = await localStore.list(STORAGE_KEY_PREFIX);
     const keys = listRes && listRes.keys ? listRes.keys : [];
@@ -1379,23 +1387,42 @@ async function getCustomerAddressHistory(phone){
         const r = await localStore.get(k);
         const orders = r ? JSON.parse(r.value) : [];
         orders.forEach(o => {
-          if(o.phone && !isRestaurantPhone(o.phone) && normalizePhone(o.phone) === normPhone && (o.address || '').trim()){
-            results.push({ address: o.address, mapLink: o.mapLink || null, name: o.name || '', date: k.replace(STORAGE_KEY_PREFIX,''), time: o.time || '' });
+          if(!(o.address || '').trim()) return;
+
+          let phoneMatch = false;
+          if(hasPhone && o.phone && !isRestaurantPhone(o.phone) && normalizePhone(o.phone) === normPhone) phoneMatch = true;
+
+          let nameMatch = false;
+          if(hasName && o.name){
+            const on = o.name.trim().toLowerCase();
+            if(on === normName || on.includes(normName) || normName.includes(on)) nameMatch = true;
           }
+
+          const addrSim = hasAddress ? textSimilarity(address, o.address) : 0;
+
+          // Require at least two agreeing signals, or one very strong signal (phone, or near-identical address).
+          const isMatch = phoneMatch || (nameMatch && addrSim >= 0.35) || addrSim >= 0.6;
+          if(!isMatch) return;
+
+          candidates.push({
+            address: o.address, mapLink: o.mapLink || null, name: o.name || '', phone: o.phone || '',
+            date: k.replace(STORAGE_KEY_PREFIX,''), time: o.time || '',
+            score: (phoneMatch?3:0) + (nameMatch?2:0) + addrSim
+          });
         });
       }catch(e){}
     }
   }catch(e){}
-  results.sort((a,b) => (a.date + a.time) < (b.date + b.time) ? 1 : -1);
-  const seen = new Set();
+
+  candidates.sort((a,b) => b.score - a.score || ((a.date+a.time) < (b.date+b.time) ? 1 : -1));
+
   const unique = [];
-  results.forEach(h => {
-    const key = h.address.trim().toLowerCase();
-    if(seen.has(key)) return;
-    seen.add(key);
-    unique.push(h);
+  candidates.forEach(c => {
+    const dup = unique.find(u => textSimilarity(u.address, c.address) >= 0.7);
+    if(!dup) unique.push(c);
   });
-  return unique;
+
+  return unique.slice(0, 5);
 }
 
 function timeStringToMinutes(hhmm){
@@ -1821,14 +1848,13 @@ function openOrderModal(existing){
       </div>
 
       <label>نام مشتری</label>
-      <input type="text" id="f_name" value="${escapeHtml(o.name||'')}" oninput="scheduleDraftSave()">
+      <input type="text" id="f_name" value="${escapeHtml(o.name||'')}" oninput="scheduleDraftSave();scheduleCustomerCheck()">
 
       <label style="margin-top:12px;">آدرس</label>
-      <textarea id="f_address" style="margin-top:5px;" oninput="scheduleDraftSave();checkCaesarBlockMatch()">${escapeHtml(o.address||'')}</textarea>
+      <textarea id="f_address" style="margin-top:5px;" oninput="scheduleDraftSave();checkCaesarBlockMatch();scheduleCustomerCheck()">${escapeHtml(o.address||'')}</textarea>
       <div id="caesarMatchBanner"></div>
       <div style="display:flex;gap:8px;margin-top:6px;flex-wrap:wrap;">
         <button type="button" onclick="pickLocationForOrder()" style="background:var(--card2);border:1px solid var(--line);color:var(--text);font-size:11.5px;padding:6px 10px;border-radius:8px;font-family:inherit;">📍 انتخاب از لوکیشن‌های ذخیره‌شده</button>
-        <button type="button" onclick="saveCurrentAddressAsLocation()" style="background:var(--card2);border:1px solid var(--line);color:var(--text);font-size:11.5px;padding:6px 10px;border-radius:8px;font-family:inherit;">💾 ذخیره این آدرس برای بعد</button>
       </div>
       <div style="display:flex;gap:8px;margin-top:6px;flex-wrap:wrap;">
         <button type="button" onclick="openGoogleMapsExplicit(capturedQrLink || document.getElementById('f_address').value)" style="background:var(--card2);border:1px solid var(--line);color:var(--text);font-size:11.5px;padding:6px 10px;border-radius:8px;font-family:inherit;">🗺️ گوگل‌مپ</button>
