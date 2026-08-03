@@ -185,13 +185,15 @@ textarea{min-height:64px;resize:vertical;}
   </div>
 </div>
 
+<input type="file" id="newOrderCameraInput" class="hidden-file-input" accept="image/*" capture="environment" onchange="onNewOrderPhotoTaken(event)">
+
 <div id="modalRoot"></div>
 <div id="toastRoot"></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script>
-const APP_VERSION = 'v4.7 · 2026-07-31';
+const APP_VERSION = 'v4.9 · 2026-07-31';
 const STORAGE_KEY_PREFIX = 'orders:';
 const CURRENCIES = [
   { code:'GBP', label:'پوند (GBP)', symbol:'£' },
@@ -650,6 +652,24 @@ function onLocationLinkPasteInput(){
   window._locFormMapLink = mapUrlFor(text);
   s.textContent = 'لینک نقشه ثبت شده ✓';
   s.style.color = 'var(--teal)';
+}
+
+function onOrderLinkPasteInput(){
+  const input = document.getElementById('order_paste_link');
+  const s = document.getElementById('qrLinkStatus');
+  if(!input || !s) return;
+  const text = input.value.trim();
+  if(!text) return;
+  const looksLikeLink = /https?:\/\/\S+|(-?\d{1,3}\.\d{3,})\s*,\s*(-?\d{1,3}\.\d{3,})/.test(text);
+  if(!looksLikeLink){
+    s.textContent = 'چیزی که وارد کردی شبیه لینک نقشه یا مختصات نبود';
+    s.style.color = 'var(--red)';
+    return;
+  }
+  capturedQrLink = mapUrlFor(text);
+  s.textContent = 'لینک نقشه ثبت شده ✓';
+  s.style.color = 'var(--teal)';
+  toast('لینک نقشه از واتس‌اپ ثبت شد');
 }
 
 function loadLocationPhotoFromBlob(blob){
@@ -1707,32 +1727,16 @@ async function deleteOrder(id){
   toast('سفارش حذف شد');
 }
 
-function applyScannedMapLink(link){
-  capturedQrLink = link;
-  const s = document.getElementById('qrLinkStatus');
-  if(s){ s.textContent = 'لینک نقشه ثبت شده ✓'; s.style.color = 'var(--teal)'; }
-  const addrField = document.getElementById('f_address');
-  if(addrField && !addrField.value.trim()){
-    addrField.placeholder = 'لینک نقشه ثبت شد — اگه خواستی آدرس متنی هم اینجا بنویس (اختیاری)';
-  }
-  showDuplicateWarning(findDuplicateOrder());
+function startNewOrderFlow(){
+  const camInput = document.getElementById('newOrderCameraInput');
+  if(camInput) camInput.click();
 }
 
-function startNewOrderFlow(){
-  startQrScanner(
-    function(link){
-      openOrderModal(null);
-      applyScannedMapLink(link);
-    },
-    {
-      allowSkip: true,
-      onSkip: function(){
-        openOrderModal(null);
-        const galleryInput = document.getElementById('galleryInput');
-        if(galleryInput) galleryInput.click();
-      }
-    }
-  );
+function onNewOrderPhotoTaken(evt){
+  const file = evt.target.files[0];
+  if(!file) return;
+  openOrderModal(null);
+  loadPhotoFromBlob(file);
 }
 
 const DRAFT_KEY = 'order_draft_v1';
@@ -1830,6 +1834,8 @@ function openOrderModal(existing){
         <button type="button" onclick="openGoogleMapsExplicit(capturedQrLink || document.getElementById('f_address').value)" style="background:var(--card2);border:1px solid var(--line);color:var(--text);font-size:11.5px;padding:6px 10px;border-radius:8px;font-family:inherit;">🗺️ گوگل‌مپ</button>
         <button type="button" onclick="openWaze(capturedQrLink || document.getElementById('f_address').value)" style="background:var(--card2);border:1px solid var(--line);color:var(--text);font-size:11.5px;padding:6px 10px;border-radius:8px;font-family:inherit;">🧭 Waze</button>
       </div>
+      <label style="margin-top:6px;font-size:12px;">یا لینک لوکیشن واتس‌اپ رو اینجا نگه‌دار و Paste کن</label>
+      <input type="text" id="order_paste_link" placeholder="اینجا لمس کن، نگه‌دار، Paste بزن..." oninput="onOrderLinkPasteInput()" style="direction:ltr;text-align:left;margin-top:4px;">
 
       <label style="margin-top:12px;">تلفن</label>
       <input type="tel" id="f_phone" style="margin-top:5px;" value="${escapeHtml(o.phone||'')}" oninput="showDuplicateWarning(findDuplicateOrder());scheduleDraftSave();scheduleCustomerCheck()">
@@ -2151,7 +2157,7 @@ function buildReceiptPrompt(){
   return `این عکس یک رسید سفارش رستوران سوشی (به ترکی) است. دو نوع رسید ممکن است باشد: رسیدهای "Feed Me" که شامل نام مشتری، Telefon، Adres، Ürün و Fatura (مبلغ نهایی) است، یا رسید داخلی رستوران "RIOVERDE" که شامل Genel Toplam / Kalan Odeme به عنوان مبلغ نهایی است و ممکن است شماره تلفن یا آدرس با خط دست روی آن نوشته شده باشد.${receiptCheckNote}${qrNote}${phoneNote}${masaNote}${timeNote}
 نوع پرداخت را استخراج نکن، چون قابل اعتماد نیست و بعداً موقع تحویل توسط پیک ثبت می‌شود.
 اطلاعات زیر را استخراج کن و فقط یک JSON خام (بدون توضیح، بدون markdown) با این کلیدها برگردان:
-{"isReceipt": true یا false, "name": "نام مشتری، یا برای RIOVERDE: Masa <شماره میز>", "address": "آدرس کامل، اگر جمله‌ای در متن تکرار شده حذفش کن و فقط یک بار بنویس", "phone": "شماره تلفن مشتری یا خالی", "amount": عدد مبلغ نهایی قابل پرداخت بدون واحد, "source": "Feed Me یا تلفن رستوران", "notes": "نکات خاص سفارش مثل بدون قارچ یا سس اضافه، خیلی کوتاه", "orderNo": "شماره سفارش (Sip. No) یا خالی", "items": "لیست کامل اقلام سفارش با تعداد و قیمت هرکدوم، خط به خط، دقیقا مطابق رسید", "orderTime": "ساعت سفارش به فرمت HH:MM از روی خود رسید، یا خالی اگه پیدا نشد"}
+{"isReceipt": true یا false, "name": "نام مشتری، یا برای RIOVERDE: Masa <شماره میز>", "address": "آدرس کامل، اگر جمله‌ای در متن تکرار شده حذفش کن و فقط یک بار بنویس", "phone": "شماره تلفن مشتری یا خالی", "amount": عدد مبلغ نهایی قابل پرداخت بدون واحد, "source": "Feed Me یا تلفن رستوران", "notes": "نکات خاص سفارش مثل بدون قارچ یا سس اضافه — اگه به ترکی یا زبان دیگه‌ای نوشته شده، حتماً به فارسی ترجمه‌ش کن، خیلی کوتاه", "orderNo": "شماره سفارش (Sip. No) یا خالی", "items": "لیست کامل اقلام سفارش با تعداد و قیمت هرکدوم، خط به خط، دقیقا مطابق رسید", "orderTime": "ساعت سفارش به فرمت HH:MM از روی خود رسید، یا خالی اگه پیدا نشد"}
 اگر مبلغی به صورت دست‌نویس یا در پایین رسید نوشته شده (مثل Yalnız ... 'dir) همان را به عنوان مبلغ نهایی در نظر بگیر. آدرس یا تلفن دست‌نویس را هم اگر بود لحاظ کن. فقط JSON خام برگردان.`;
 }
 
