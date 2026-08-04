@@ -1,4 +1,4 @@
-const CACHE_NAME = 'peyk-sushinn-v2.9';
+const CACHE_NAME = 'peyk-sushinn-v5.4';
 const APP_SHELL = './index.html';
 
 self.addEventListener('install', (event) => {
@@ -18,13 +18,16 @@ self.addEventListener('activate', (event) => {
 
 // Network-first for the app shell so updates are picked up when online,
 // falling back to the cached copy when offline (no signal / airplane mode).
+// cache: 'no-store' forces a real network round-trip, bypassing the browser's
+// own HTTP cache layer (which could otherwise silently serve a stale copy
+// even though this fetch() call looks like it's going to the network).
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
   const url = new URL(event.request.url);
   if (url.origin !== self.location.origin) return; // let external calls (APIs, fonts, CDNs) pass through untouched
 
   event.respondWith(
-    fetch(event.request)
+    fetch(event.request, { cache: 'no-store' })
       .then((response) => {
         const copy = response.clone();
         caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
