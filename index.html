@@ -168,9 +168,10 @@ textarea{min-height:64px;resize:vertical;}
       </div>
     </div>
     <div class="stats">
-      <div class="stat"><b id="statQueue">0</b><span>در صف</span></div>
-      <div class="stat"><b id="statDelivered">0</b><span>تحویل‌شده</span></div>
-      <div class="stat cash"><b id="statTotal">0</b><span>دریافتی (TL)</span></div>
+      <div class="stat" onclick="showQueueList()" style="cursor:pointer;"><b id="statQueue">0</b><span>در صف</span></div>
+      <div class="stat" onclick="showDeliveredList()" style="cursor:pointer;"><b id="statDelivered">0</b><span>تحویل‌شده</span></div>
+      <div class="stat cash" onclick="showReceivedBreakdown()" style="cursor:pointer;"><b id="statTotal">0</b><span>دریافتی (TL)</span></div>
+      <div class="stat" onclick="showCancelledList()" style="cursor:pointer;"><b id="statCancelled">0</b><span>کنسل‌شده</span></div>
     </div>
     <div class="forex-note" id="forexNote" style="display:none;"></div>
   </header>
@@ -195,7 +196,7 @@ textarea{min-height:64px;resize:vertical;}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script>
-const APP_VERSION = 'v5.6 · 2026-08-06';
+const APP_VERSION = 'v5.8 · 2026-08-06';
 const STORAGE_KEY_PREFIX = 'orders:';
 const EXPENSE_KEY_PREFIX = 'expenses:';
 const EXPENSE_CATEGORIES = ['بنزین', 'خرید فروشگاهی', 'سایر'];
@@ -1595,8 +1596,9 @@ function render(){
   const vl = document.getElementById('versionLabel');
   if(vl) vl.textContent = 'نسخه ' + APP_VERSION;
 
-  const pending = currentOrders.filter(o => o.status !== 'delivered').sort((a,b) => (a.priority||0) - (b.priority||0));
+  const pending = currentOrders.filter(o => o.status !== 'delivered' && o.status !== 'cancelled').sort((a,b) => (a.priority||0) - (b.priority||0));
   const delivered = currentOrders.filter(o => o.status === 'delivered');
+  const cancelled = currentOrders.filter(o => o.status === 'cancelled');
 
   let cashTotal = 0, cardTotal = 0, transferTotal = 0;
   const forexTotals = {};
@@ -1617,6 +1619,7 @@ function render(){
   document.getElementById('statQueue').textContent = pending.length;
   document.getElementById('statDelivered').textContent = delivered.length;
   document.getElementById('statTotal').textContent = fmt(tlTotal);
+  document.getElementById('statCancelled').textContent = cancelled.length;
 
   const forexNote = document.getElementById('forexNote');
   const forexKeys = Object.keys(forexTotals);
@@ -1719,6 +1722,7 @@ function activeOrderCard(o){
         <button onclick="recordArrivalLocation('${o.id}')">📍 رسیدم اینجا</button>
         ${receiptPhotoButtonHtml(o)}
         <button onclick="editOrder('${o.id}')">ویرایش</button>
+        <button class="danger" onclick="cancelOrder('${o.id}')">❌ کنسل شد</button>
         <button class="danger" onclick="deleteOrder('${o.id}')">حذف</button>
       </div>
       <div class="order-actions">
@@ -1752,6 +1756,7 @@ function queueOrderCard(o, idx, total){
           <button onclick="scanQrForOrder('${o.id}')">📷 اسکن QR</button>
           ${receiptPhotoButtonHtml(o)}
           <button onclick="editOrder('${o.id}')">ویرایش</button>
+          <button class="danger" onclick="cancelOrder('${o.id}')">❌ کنسل شد</button>
           <button class="danger" onclick="deleteOrder('${o.id}')">حذف</button>
         </div>
       </div>
@@ -1783,7 +1788,7 @@ function deliveredOrderCard(o){
 }
 
 async function moveOrderPriority(id, dir){
-  const pending = currentOrders.filter(o => o.status !== 'delivered').sort((a,b) => (a.priority||0) - (b.priority||0));
+  const pending = currentOrders.filter(o => o.status !== 'delivered' && o.status !== 'cancelled').sort((a,b) => (a.priority||0) - (b.priority||0));
   const idx = pending.findIndex(o => o.id === id);
   const swapIdx = idx + dir;
   if(idx < 0 || swapIdx < 0 || swapIdx >= pending.length) return;
@@ -1882,6 +1887,71 @@ async function deleteOrder(id){
   await saveOrders();
   render();
   toast('سفارش حذف شد');
+}
+
+function autoSaveAddressToLocations(name, address, mapLink){
+  if(!(address || '').trim()) return;
+  const list = getSavedLocations();
+  const normAddr = address.trim().toLowerCase();
+  const existingMatch = list.find(l =>
+    (l.address || '').trim().toLowerCase() === normAddr ||
+    (mapLink && l.mapLink && l.mapLink === mapLink)
+  );
+  if(existingMatch){
+    if(mapLink && !existingMatch.mapLink) existingMatch.mapLink = mapLink;
+  } else {
+    list.push({
+      id: 'loc_' + Date.now() + '_' + Math.random().toString(36).slice(2,7),
+      name: (name || '').trim() || ('لوکیشن ' + new Date().toLocaleDateString('fa-IR')),
+      address: address.trim(),
+      mapLink: mapLink || null
+    });
+  }
+  setSavedLocations(list);
+}
+
+async function cancelOrder(id){
+  const idx = currentOrders.findIndex(o => o.id === id);
+  if(idx === -1) return;
+  const order = currentOrders[idx];
+
+  autoSaveAddressToLocations(order.name, order.address, order.mapLink);
+
+  currentOrders[idx] = {
+    ...order,
+    status: 'cancelled',
+    cancelledAt: new Date().toLocaleTimeString('fa-IR', { hour:'2-digit', minute:'2-digit' }),
+    cancelledAtTs: Date.now()
+  };
+  await saveOrders();
+  render();
+  toast('سفارش کنسل شد — آدرسش برای بعد ذخیره شد');
+}
+
+function showCancelledList(){
+  const cancelled = currentOrders.filter(o => o.status === 'cancelled').slice().sort((a,b) => (b.cancelledAtTs||0) - (a.cancelledAtTs||0));
+  const root = document.getElementById('modalRoot');
+  root.innerHTML = `
+  <div class="overlay">
+    <div class="sheet">
+      <div class="sheet-head">
+        <h2>سفارش‌های کنسل‌شده (${cancelled.length})</h2>
+        <button class="close-x" onclick="closeModal()">×</button>
+      </div>
+      ${cancelled.length === 0 ? '<div class="empty">سفارش کنسل‌شده‌ای نیست.</div>' :
+        cancelled.map(o => `
+        <div class="order">
+          <div class="order-body">
+            <div class="order-name">${escapeHtml(o.name || 'بدون نام')}</div>
+            <div class="order-addr">${escapeHtml(o.address || '')}</div>
+            <div class="order-note">فیش: ${fmt(o.amount)} TL (توی محاسبات حساب نمی‌شه) — کنسل‌شده ساعت ${escapeHtml(o.cancelledAt || '')}</div>
+            <div class="order-actions">
+              <button class="danger" onclick="deleteOrder('${o.id}')">حذف کامل</button>
+            </div>
+          </div>
+        </div>`).join('')}
+    </div>
+  </div>`;
 }
 
 function startNewOrderFlow(){
@@ -3037,6 +3107,7 @@ async function confirmDelivery(){
     paymentMismatch: mismatch,
     changeGiven: changeAmt || null,
     deliveredAt: new Date().toLocaleTimeString('fa-IR', { hour:'2-digit', minute:'2-digit' }),
+    deliveredAtTs: Date.now(),
     deliveryDurationMin: startedAt ? Math.max(0, Math.round((Date.now() - startedAt) / 60000)) : null
   };
   await saveOrders();
@@ -3054,6 +3125,84 @@ async function confirmDelivery(){
   } else {
     toast(mismatchNote + 'همه سفارش‌های صف تحویل داده شدن 🎉');
   }
+}
+
+function showQueueList(){
+  const pending = currentOrders.filter(o => o.status !== 'delivered' && o.status !== 'cancelled').sort((a,b) => (a.priority||0) - (b.priority||0));
+  const root = document.getElementById('modalRoot');
+  root.innerHTML = `
+  <div class="overlay">
+    <div class="sheet">
+      <div class="sheet-head">
+        <h2>سفارش‌های مانده (${pending.length})</h2>
+        <button class="close-x" onclick="closeModal()">×</button>
+      </div>
+      ${pending.length === 0 ? '<div class="empty">صف خالیه 🎉</div>' :
+        pending.map((o,i) => queueOrderCard(o, i, pending.length)).join('')}
+    </div>
+  </div>`;
+}
+
+function showDeliveredList(){
+  const delivered = currentOrders.filter(o => o.status === 'delivered').slice().sort((a,b) => (a.deliveredAtTs||0) - (b.deliveredAtTs||0));
+  const root = document.getElementById('modalRoot');
+  root.innerHTML = `
+  <div class="overlay">
+    <div class="sheet">
+      <div class="sheet-head">
+        <h2>تحویل‌شده‌ها به ترتیب تحویل (${delivered.length})</h2>
+        <button class="close-x" onclick="closeModal()">×</button>
+      </div>
+      ${delivered.length === 0 ? '<div class="empty">هنوز چیزی تحویل نشده.</div>' :
+        delivered.map((o,i) => `<div class="order-note" style="margin-bottom:2px;">#${i+1}</div>` + deliveredOrderCard(o)).join('')}
+    </div>
+  </div>`;
+}
+
+function showReceivedBreakdown(){
+  const delivered = currentOrders.filter(o => o.status === 'delivered');
+  let orderAmountTotal = 0;
+  let cashTL = 0, cardTotal = 0, transferTotal = 0, tipTotal = 0;
+  const forexByCurrency = {};
+
+  delivered.forEach(o => {
+    orderAmountTotal += Number(o.amount) || 0;
+    getOrderPayments(o).forEach(p => {
+      if(p.method === 'نقد') cashTL += Number(p.amountTL) || 0;
+      else if(p.method === 'کارت') cardTotal += Number(p.amountTL) || 0;
+      else if(p.method === 'واریز') transferTotal += Number(p.amountTL) || 0;
+      else if(p.method === 'ارز'){
+        if(!forexByCurrency[p.currency]) forexByCurrency[p.currency] = { amount: 0, tlEquivalent: 0 };
+        forexByCurrency[p.currency].amount += Number(p.currencyAmount) || 0;
+        forexByCurrency[p.currency].tlEquivalent += Number(p.tlEquivalent) || 0;
+      }
+    });
+    if(o.changeGiven) cashTL -= Number(o.changeGiven) || 0;
+    const mismatch = getOrderMismatch(o);
+    if(mismatch > 0) tipTotal += mismatch;
+  });
+
+  const forexLines = Object.keys(forexByCurrency).map(code => {
+    const f = forexByCurrency[code];
+    return `<div class="report-line"><span>ارز — ${escapeHtml(code)}</span><b>${fmt(f.amount)} ${currencySymbol(code)} (≈${fmt(f.tlEquivalent)} TL)</b></div>`;
+  }).join('');
+
+  const root = document.getElementById('modalRoot');
+  root.innerHTML = `
+  <div class="overlay">
+    <div class="sheet">
+      <div class="sheet-head">
+        <h2>ریز مبلغ دریافتی</h2>
+        <button class="close-x" onclick="closeModal()">×</button>
+      </div>
+      <div class="report-line"><span>کل مبلغ سفارش‌ها (تا آخرین سفارش تحویلی)</span><b>${fmt(orderAmountTotal)} TL</b></div>
+      <div class="report-line"><span>نقد (لیر)</span><b>${fmt(cashTL)} TL</b></div>
+      ${forexLines}
+      <div class="report-line"><span>کارت</span><b>${fmt(cardTotal)} TL</b></div>
+      <div class="report-line"><span>واریز به حساب</span><b>${fmt(transferTotal)} TL</b></div>
+      ${tipTotal > 0 ? `<div class="report-line"><span style="color:#146c2e;">💰 تیپ خودکار</span><b style="color:#146c2e;">+${fmt(tipTotal)} TL</b></div>` : ''}
+    </div>
+  </div>`;
 }
 
 function openReport(){
@@ -3183,7 +3332,7 @@ function buildExcelRows(orders){
       'ساعت سفارش': o.time || '',
       'ساعت تحویل': o.deliveredAt || '',
       'مدت تحویل (دقیقه)': o.deliveryDurationMin != null ? o.deliveryDurationMin : '',
-      'وضعیت': o.status === 'delivered' ? 'تحویل‌شده' : (o.incomplete ? 'ناقص' : 'در صف'),
+      'وضعیت': o.status === 'delivered' ? 'تحویل‌شده' : o.status === 'cancelled' ? 'کنسل‌شده' : (o.incomplete ? 'ناقص' : 'در صف'),
       'نام مشتری': o.name || '',
       'آدرس': o.address || '',
       'تلفن': o.phone || '',
