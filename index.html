@@ -211,7 +211,7 @@ textarea{min-height:64px;resize:vertical;}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script>
-const APP_VERSION = 'v6.3 · 2026-08-10';
+const APP_VERSION = 'v6.5 · 2026-08-10';
 const STORAGE_KEY_PREFIX = 'orders:';
 const EXPENSE_KEY_PREFIX = 'expenses:';
 const EXPENSE_CATEGORIES = ['بنزین', 'خرید فروشگاهی', 'سایر'];
@@ -2081,6 +2081,7 @@ function openOrderModal(existing){
         </div>
         <input type="file" id="galleryInput" class="hidden-file-input" accept="image/*" onchange="onPhotoSelected(event)">
         <div class="ai-status" id="aiStatus"></div>
+        ${getGeminiKey() ? `<button id="retryGeminiBtn" class="mini-btn" disabled onclick="runGeminiExtract()" style="margin-top:4px;">🔄 تلاش دوباره برای خواندن (اگه اینترنت قطع/وصل شد)</button>` : ''}
         ${getGeminiKey() ? '' : `<div class="order-note" style="margin-top:8px;">دقت‌ت رو با یه کلید رایگان Gemini بالا ببر. <span style="text-decoration:underline;cursor:pointer;color:var(--amber);" onclick="openSettings()">فعال کردن Gemini (رایگان)</span></div>`}
       </div>
 
@@ -2248,6 +2249,8 @@ async function loadPhotoFromBlob(blob){
 
     const aiBtnEl = document.getElementById('aiBtn');
     if(aiBtnEl) aiBtnEl.disabled = false;
+    const retryBtnEl = document.getElementById('retryGeminiBtn');
+    if(retryBtnEl) retryBtnEl.disabled = false;
     decodeQrFromImage(finalDataUrl);
     showDuplicateWarning(findDuplicateOrder());
     if(getGeminiKey()){
@@ -2734,6 +2737,7 @@ function photoBlockHtml(key, existing, label){
   const stored = (window._paymentPhotos && window._paymentPhotos[key]) || null;
   const base64 = stored ? stored.base64 : (existing ? existing.posPhoto : null);
   const media = stored ? stored.media : (existing ? existing.posMedia : null);
+  const isCard = key.indexOf('card_') === 0;
   return `
       <label>${label || 'عکس رسید (اختیاری)'}</label>
       <div class="photo-zone">
@@ -2744,6 +2748,8 @@ function photoBlockHtml(key, existing, label){
         </div>
         <input type="file" id="payPhotoCam_${key}" class="hidden-file-input" accept="image/*" capture="environment" onchange="onPaymentPhotoSelected(event, '${key}')">
         <input type="file" id="payPhotoGal_${key}" class="hidden-file-input" accept="image/*" onchange="onPaymentPhotoSelected(event, '${key}')">
+        ${isCard ? `<div class="ai-status" id="payPhotoStatus_${key}"></div>` : ''}
+        ${isCard && base64 ? `<button class="mini-btn" onclick="runPaymentPhotoAmountRead('${key}')" style="margin-top:4px;">🔄 تلاش دوباره برای خواندن مبلغ</button>` : ''}
       </div>
   `;
 }
@@ -2764,6 +2770,8 @@ function onPaymentPhotoSelected(evt, key){
       base64: resized.dataUrl.split(',')[1]
     };
     if(key.indexOf('card_') === 0){
+      syncPaymentDraftFromDom();
+      renderPaymentSections();
       runPaymentPhotoAmountRead(key);
     }
   };
@@ -2772,10 +2780,18 @@ function onPaymentPhotoSelected(evt, key){
 
 async function runPaymentPhotoAmountRead(key){
   const geminiKey = getGeminiKey();
-  if(!geminiKey) return;
+  const statusEl = document.getElementById('payPhotoStatus_' + key);
+  if(!geminiKey){
+    if(statusEl) statusEl.textContent = 'برای خوندن خودکار مبلغ، اول یه کلید Gemini توی تنظیمات ذخیره کن.';
+    return;
+  }
   const photo = window._paymentPhotos && window._paymentPhotos[key];
-  if(!photo) return;
+  if(!photo){
+    if(statusEl) statusEl.textContent = 'اول عکس فیش رو بگیر.';
+    return;
+  }
   const idx = Number(key.replace('card_', ''));
+  if(statusEl) statusEl.textContent = 'در حال خواندن مبلغ...';
 
   const prompt = `این عکس یک فیش دستگاه پوز (کارت‌خوان) است. فقط مبلغ نهایی پرداخت‌شده (به لیر ترکیه) رو از روش پیدا کن — هیچی حدس نزن. اگه واضح نبود یا اصلاً فیش پوز نبود، amount رو صفر بذار. فقط یک JSON خام برگردون: {"amount": عدد}`;
 
@@ -2794,7 +2810,10 @@ async function runPaymentPhotoAmountRead(key){
         }
       })
     });
-    if(!response.ok) return;
+    if(!response.ok){
+      if(statusEl) statusEl.textContent = '⚠ خطا در اتصال (اینترنت رو چک کن) — دکمه‌ی «تلاش دوباره» رو بزن یا دستی وارد کن.';
+      return;
+    }
     const data = await response.json();
     const rawText = data.candidates && data.candidates[0] && data.candidates[0].content &&
       data.candidates[0].content.parts && data.candidates[0].content.parts[0] ?
@@ -2805,9 +2824,11 @@ async function runPaymentPhotoAmountRead(key){
       paymentDraft.cards[idx].amountTL = Math.round(parsed.amount);
       renderPaymentSections();
       toast('مبلغ از روی فیش پوز خونده شد ✓ — بررسی کن');
+    } else if(statusEl){
+      statusEl.textContent = 'مبلغی روی این عکس پیدا نشد — دستی وارد کن یا دوباره امتحان کن.';
     }
   }catch(e){
-    // silent — amount stays manual-entry if reading fails
+    if(statusEl) statusEl.textContent = '⚠ خطا در اتصال (اینترنت رو چک کن) — دکمه‌ی «تلاش دوباره» رو بزن یا دستی وارد کن.';
   }
 }
 
@@ -2847,6 +2868,33 @@ function syncPaymentDraftFromDom(){
 
   const changeEl = document.getElementById('pay_change_given');
   if(changeEl) d.changeGiven = changeEl.value;
+}
+
+function calcCashChange(){
+  const o = currentOrders.find(x => x.id === payingOrderId);
+  const receiptAmount = o ? (Number(o.amount) || 0) : 0;
+  const handedField = document.getElementById('cash_handed_over');
+  const statusEl = document.getElementById('cashChangeStatus');
+  if(!statusEl || !handedField) return;
+  const handed = Number(String(handedField.value || '').replace(/[^0-9.]/g,'')) || 0;
+  if(handed <= 0){ statusEl.innerHTML = ''; return; }
+
+  const change = Math.round(handed - receiptAmount);
+  if(change > 0){
+    statusEl.innerHTML = 'باید ' + fmt(change) + ' TL بابت مانده بهش پس بدی. <span style="text-decoration:underline;cursor:pointer;color:var(--amber);" onclick="applyCashChange(' + handed + ',' + change + ')">اعمال به فرم</span>';
+  } else if(change < 0){
+    statusEl.textContent = 'این مبلغ ' + fmt(Math.abs(change)) + ' TL کمتر از فیشه — یا اشتباه تایپ کردی، یا باید بقیه‌ش رو با روش دیگه بگیری.';
+  } else {
+    statusEl.innerHTML = 'دقیقاً جوره، مانده‌ای نیست. <span style="text-decoration:underline;cursor:pointer;color:var(--amber);" onclick="applyCashChange(' + handed + ',0)">اعمال به فرم</span>';
+  }
+}
+
+function applyCashChange(handed, change){
+  syncPaymentDraftFromDom();
+  paymentDraft.cashTL = handed;
+  paymentDraft.changeGiven = change || '';
+  renderPaymentSections();
+  toast('مانده محاسبه و توی فرم اعمال شد');
 }
 
 function togglePayOnline(){
@@ -2956,7 +3004,7 @@ function renderPaymentSections(){
         <span>پرداخت آنلاین (قبلاً پرداخت شده)</span>
       </label>
       ${d.online.used ? `
-        <div class="order-note" style="color:var(--teal);">✓ چیزی از مشتری نگیر.</div>
+        <div class="order-note" style="color:var(--teal);">✓ اصل سفارش قبلاً پرداخت شده. اگه چیز اضافه‌ای (مثلاً یه قلم جدید) موقع تحویل گرفتی، بخش‌های نقد/کارت/واریز پایین‌تر رو هم پر کن — با هم مشکلی ندارن.</div>
         <label>یادداشت (اختیاری)</label>
         <textarea id="pay_online_note">${escapeHtml(d.online.note||'')}</textarea>
         ${photoBlockHtml('online', d.online, 'عکس فیش/تاییدیه (اختیاری)')}
@@ -2986,6 +3034,12 @@ function renderPaymentSections(){
       <div class="order-num">نقد</div>
       <label>مبلغ نقدی (لیر)</label>
       <input type="text" inputmode="numeric" id="pay_cash_tl" value="${d.cashTL!=null?d.cashTL:''}">
+
+      <div style="border-top:1px dashed var(--line);margin-top:10px;padding-top:10px;">
+        <label>مبلغی که مشتری بهت داد (اختیاری — برای محاسبه‌ی خودکار مانده)</label>
+        <input type="text" inputmode="numeric" id="cash_handed_over" oninput="calcCashChange()">
+        <div class="order-note" id="cashChangeStatus"></div>
+      </div>
 
       ${d.forex.map((f,i) => `
         <div style="border-top:1px dashed var(--line);margin-top:10px;padding-top:10px;">
