@@ -35,6 +35,10 @@
   --red:#E0645F;
   --muted:#8B909B;
   --text:#EDEEF0;
+  --tip-ink:#146c2e;
+  --tip-bg:#DFF5E3;
+  --deficit-ink:#791F1F;
+  --deficit-bg:#FCEBEB;
 }
 *{box-sizing:border-box;}
 html,body{margin:0;padding:0;background:var(--bg);color:var(--text);font-family:'Vazirmatn',sans-serif;}
@@ -47,14 +51,20 @@ header.top{position:sticky;top:0;z-index:20;background:var(--bg);border-bottom:1
 .title-row h1{font-size:19px;font-weight:700;margin:0;letter-spacing:.2px;}
 .title-row .sub{font-size:12px;color:var(--muted);margin-top:2px;}
 .date-chip{font-size:12px;background:var(--card2);border:1px solid var(--line);border-radius:20px;padding:5px 12px;color:var(--muted);}
+.mini-btn{background:var(--card2);border:1px solid var(--line);color:var(--text);font-size:12px;padding:6px 10px;border-radius:8px;font-family:inherit;}
 
 .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:12px;}
-.stat{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:9px 8px;text-align:center;}
-.stat b{display:block;font-size:16px;font-family:'JetBrains Mono',monospace;font-weight:700;}
-.stat span{font-size:11px;color:var(--muted);}
+.received-panel{margin-top:8px;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px 12px;}
+.received-panel-head{display:flex;align-items:center;justify-content:space-between;gap:8px;}
+.received-panel-head .sub-inline{font-size:12px;color:var(--muted);}
+.received-line{display:flex;justify-content:space-between;align-items:center;font-size:13px;padding:5px 0;border-bottom:1px solid var(--line);}
+.received-line:last-child{border-bottom:none;}
+.stat{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:6px 6px;text-align:center;}
+.stat b{display:block;font-size:14px;font-family:'JetBrains Mono',monospace;font-weight:700;}
+.stat span{font-size:10.5px;color:var(--muted);}
 .stat.cash b{color:var(--cash);}
 .stat.card b{color:var(--card-pay);}
-.forex-note{font-size:11px;color:var(--muted);text-align:center;margin-top:6px;}
+.forex-note{font-size:11.5px;color:var(--muted);text-align:center;margin-top:6px;}
 
 .section-label{font-size:12px;color:var(--muted);margin:18px 2px 8px;display:flex;justify-content:space-between;align-items:center;}
 
@@ -62,18 +72,18 @@ header.top{position:sticky;top:0;z-index:20;background:var(--bg);border-bottom:1
 .order.active{box-shadow:0 0 0 2px var(--amber),0 2px 6px rgba(0,0,0,.35);}
 .order-body{padding:12px 14px 10px;}
 .order-top{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;}
-.order-num{font-size:11px;color:#8a8574;font-family:'JetBrains Mono',monospace;}
+.order-num{font-size:11.5px;color:#8a8574;font-family:'JetBrains Mono',monospace;}
 .order-name{font-size:15px;font-weight:700;margin:2px 0 4px;}
-.order-addr{font-size:12.5px;color:#4a463a;line-height:1.5;margin-bottom:6px;}
+.order-addr{font-size:12px;color:#4a463a;line-height:1.5;margin-bottom:6px;}
 .order-meta{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;}
-.badge{font-size:11px;padding:3px 9px;border-radius:20px;font-weight:600;}
+.badge{font-size:11.5px;padding:3px 9px;border-radius:20px;font-weight:600;}
 .badge.cash{background:#FAEEDA;color:var(--amber-ink);}
 .badge.card{background:#E1F5EE;color:var(--teal-ink);}
 .badge.transfer{background:#E6F1FB;color:var(--blue-ink);}
 .badge.forex{background:#EEEDFE;color:var(--purple-ink);}
-.badge.online{background:#DFF5E3;color:#146c2e;}
+.badge.online{background:var(--tip-bg);color:var(--tip-ink);}
 .badge.src{background:#eee;color:#555;}
-.badge.pending{background:#FCEBEB;color:#791F1F;}
+.badge.pending{background:var(--deficit-bg);color:var(--deficit-ink);}
 .order-amt{font-family:'JetBrains Mono',monospace;font-size:20px;font-weight:700;white-space:nowrap;}
 .order-actions{display:flex;gap:6px;margin-top:10px;border-top:1px dashed #cfc7ae;padding-top:8px;flex-wrap:wrap;}
 .order-actions button{flex:1;min-width:60px;background:none;border:none;font-size:12px;color:#5a5647;padding:6px;border-radius:6px;font-family:inherit;}
@@ -88,7 +98,7 @@ header.top{position:sticky;top:0;z-index:20;background:var(--bg);border-bottom:1
 
 .fab-row{position:fixed;bottom:0;left:0;right:0;background:linear-gradient(0deg,var(--bg) 60%,transparent);padding:14px 14px 18px;z-index:30;}
 .fab-inner{max-width:520px;margin:0 auto;display:flex;gap:10px;}
-.fab{flex:1;border:none;border-radius:14px;padding:13px 6px;font-size:12.5px;font-weight:700;font-family:inherit;white-space:nowrap;}
+.fab{flex:1;border:none;border-radius:14px;padding:13px 6px;font-size:12px;font-weight:700;font-family:inherit;white-space:nowrap;}
 .fab.primary{background:var(--amber);color:var(--amber-ink);}
 .fab.secondary{background:var(--card2);color:var(--text);border:1px solid var(--line);}
 
@@ -99,38 +109,38 @@ header.top{position:sticky;top:0;z-index:20;background:var(--bg);border-bottom:1
 .close-x{background:var(--card2);border:none;color:var(--text);width:30px;height:30px;border-radius:50%;font-size:16px;}
 
 label{display:block;font-size:12px;color:var(--muted);margin:12px 0 5px;}
-input[type=text],input[type=tel],input[type=date],input[type=number],textarea,select{width:100%;background:var(--card);border:1px solid var(--line);color:var(--text);border-radius:10px;padding:11px 12px;font-size:14.5px;font-family:inherit;}
+input[type=text],input[type=tel],input[type=date],input[type=number],textarea,select{width:100%;background:var(--card);border:1px solid var(--line);color:var(--text);border-radius:10px;padding:11px 12px;font-size:14px;font-family:inherit;}
 textarea{min-height:64px;resize:vertical;}
 .two-col{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
 .chip-group{display:flex;gap:8px;flex-wrap:wrap;}
-.chip{flex:1;min-width:80px;text-align:center;padding:11px 6px;border-radius:10px;border:1px solid var(--line);background:var(--card);font-size:12.5px;font-family:inherit;color:var(--text);}
+.chip{flex:1;min-width:80px;text-align:center;padding:11px 6px;border-radius:10px;border:1px solid var(--line);background:var(--card);font-size:12px;font-family:inherit;color:var(--text);}
 .chip.active{border-color:var(--amber);background:rgba(227,168,87,.15);color:var(--amber);font-weight:700;}
 
 .photo-zone{border:1.5px dashed var(--line);border-radius:12px;padding:16px;text-align:center;margin-top:6px;}
 .photo-zone img{max-width:100%;max-height:220px;border-radius:8px;margin-bottom:8px;}
 .photo-btns{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;}
-.photo-btns button{background:var(--card2);border:1px solid var(--line);color:var(--text);padding:9px 12px;border-radius:9px;font-size:12.5px;font-family:inherit;}
+.photo-btns button{background:var(--card2);border:1px solid var(--line);color:var(--text);padding:9px 12px;border-radius:9px;font-size:12px;font-family:inherit;}
 .photo-btns button.ai{background:var(--amber);color:var(--amber-ink);border:none;font-weight:700;}
 .photo-btns button:disabled{opacity:.5;}
 .hidden-file-input{display:none;}
 .ai-status{font-size:12px;color:var(--amber);margin-top:8px;min-height:16px;}
-.dup-warning{background:rgba(224,100,95,.15);border:1px solid var(--red);color:#f3a8a5;border-radius:10px;padding:10px 12px;font-size:12.5px;margin-top:14px;line-height:1.6;}
+.dup-warning{background:rgba(224,100,95,.15);border:1px solid var(--red);color:#f3a8a5;border-radius:10px;padding:10px 12px;font-size:12px;margin-top:14px;line-height:1.6;}
 
 .loc-group{border:1px solid var(--line);border-radius:12px;margin-bottom:10px;overflow:hidden;background:var(--card);}
 .loc-group > summary{padding:12px 14px;font-size:14px;font-weight:700;cursor:pointer;list-style:none;color:var(--amber);}
 .loc-group > summary::-webkit-details-marker{display:none;}
 .loc-group[open] > summary{border-bottom:1px solid var(--line);}
 .loc-group .loc-subgroup{margin:8px 10px;border:1px solid var(--line);border-radius:10px;background:var(--card2);}
-.loc-subgroup > summary{padding:9px 12px;font-size:12.5px;font-weight:600;cursor:pointer;list-style:none;color:var(--text);}
+.loc-subgroup > summary{padding:9px 12px;font-size:12px;font-weight:600;cursor:pointer;list-style:none;color:var(--text);}
 .loc-subgroup > summary::-webkit-details-marker{display:none;}
 .loc-subgroup .order{margin:6px 10px 10px;}
 
 .save-bar{margin-top:18px;display:flex;gap:10px;}
-.save-bar button{flex:1;padding:13px;border-radius:12px;border:none;font-size:14.5px;font-weight:700;font-family:inherit;}
+.save-bar button{flex:1;padding:13px;border-radius:12px;border:none;font-size:14px;font-weight:700;font-family:inherit;}
 .save-bar .save{background:var(--amber);color:var(--amber-ink);}
 .save-bar .cancel{background:var(--card2);color:var(--text);border:1px solid var(--line);}
 
-.report-line{display:flex;justify-content:space-between;padding:9px 0;border-bottom:1px solid var(--line);font-size:13.5px;}
+.report-line{display:flex;justify-content:space-between;padding:9px 0;border-bottom:1px solid var(--line);font-size:14px;}
 .report-line b{font-family:'JetBrains Mono',monospace;}
 .report-total{margin-top:8px;padding-top:12px;border-top:2px solid var(--amber);display:flex;justify-content:space-between;font-size:16px;font-weight:700;}
 .report-txt{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px;font-size:12px;white-space:pre-wrap;font-family:'JetBrains Mono',monospace;line-height:1.7;margin-top:14px;color:var(--muted);max-height:220px;overflow-y:auto;}
@@ -157,9 +167,8 @@ textarea{min-height:64px;resize:vertical;}
   <header class="top">
     <div class="title-row">
       <div>
-        <h1>پیک سوشین</h1>
+        <h1>پیک سوشین <span id="versionLabel" style="font-size:11px;color:var(--amber);font-weight:600;"></span></h1>
         <div class="sub" id="dateLabel"></div>
-        <div class="sub" id="versionLabel" style="font-size:11.5px;color:var(--amber);font-weight:600;"></div>
       </div>
       <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
         <button id="expensesBtn" class="date-chip" style="cursor:pointer;">🧾 هزینه‌ها</button>
@@ -170,8 +179,14 @@ textarea{min-height:64px;resize:vertical;}
     <div class="stats">
       <div class="stat" onclick="showQueueList()" style="cursor:pointer;"><b id="statQueue">0</b><span>در صف</span></div>
       <div class="stat" onclick="showDeliveredList()" style="cursor:pointer;"><b id="statDelivered">0</b><span>تحویل‌شده</span></div>
-      <div class="stat cash" onclick="showReceivedBreakdown()" style="cursor:pointer;"><b id="statTotal">0</b><span>دریافتی (TL)</span></div>
       <div class="stat" onclick="showCancelledList()" style="cursor:pointer;"><b id="statCancelled">0</b><span>کنسل‌شده</span></div>
+    </div>
+    <div class="received-panel">
+      <div class="received-panel-head">
+        <span><b id="statTotal">0</b> <span class="sub-inline">دریافتی (TL)</span></span>
+        <button id="receivedToggleBtn" class="mini-btn" onclick="toggleReceivedPanel()">مخفی کن</button>
+      </div>
+      <div id="receivedPanelBody"></div>
     </div>
     <div class="forex-note" id="forexNote" style="display:none;"></div>
   </header>
@@ -196,7 +211,7 @@ textarea{min-height:64px;resize:vertical;}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script>
-const APP_VERSION = 'v5.8 · 2026-08-06';
+const APP_VERSION = 'v6.3 · 2026-08-10';
 const STORAGE_KEY_PREFIX = 'orders:';
 const EXPENSE_KEY_PREFIX = 'expenses:';
 const EXPENSE_CATEGORIES = ['بنزین', 'خرید فروشگاهی', 'سایر'];
@@ -937,7 +952,7 @@ function saveLocationForm(id){
   }
   if(!address) address = '(بدون آدرس متنی — لینک نقشه موجوده)';
   if(!name){
-    name = 'لوکیشن ' + new Date().toLocaleDateString('fa-IR') + ' ' + new Date().toLocaleTimeString('fa-IR', { hour:'2-digit', minute:'2-digit' });
+    name = 'لوکیشن ' + new Date().toLocaleDateString('fa-IR-u-ca-gregory') + ' ' + new Date().toLocaleTimeString('fa-IR', { hour:'2-digit', minute:'2-digit' });
   }
   const list = getSavedLocations();
   if(id){
@@ -1057,7 +1072,7 @@ function openSettings(){
   <div class="overlay">
     <div class="sheet">
       <div class="sheet-head">
-        <h2>تنظیمات <span style="font-size:11px;color:var(--muted);font-weight:400;">(${APP_VERSION})</span></h2>
+        <h2>تنظیمات <span style="font-size:11.5px;color:var(--muted);font-weight:400;">(${APP_VERSION})</span></h2>
         <button class="close-x" onclick="closeModal()">×</button>
       </div>
 
@@ -1592,9 +1607,12 @@ function getOrderMismatch(o){
 
 function render(){
   const dl = document.getElementById('dateLabel');
-  dl.textContent = new Date().toLocaleDateString('fa-IR', { weekday:'long', day:'numeric', month:'long' });
+  dl.textContent = new Date().toLocaleDateString('en-US', { weekday: 'long' }) + ', ' + todayKey().replace(STORAGE_KEY_PREFIX, '');
+  dl.style.fontFamily = 'monospace';
+  dl.style.direction = 'ltr';
+  dl.style.textAlign = 'right';
   const vl = document.getElementById('versionLabel');
-  if(vl) vl.textContent = 'نسخه ' + APP_VERSION;
+  if(vl) vl.textContent = '(' + APP_VERSION.split('·')[0].trim() + ')';
 
   const pending = currentOrders.filter(o => o.status !== 'delivered' && o.status !== 'cancelled').sort((a,b) => (a.priority||0) - (b.priority||0));
   const delivered = currentOrders.filter(o => o.status === 'delivered');
@@ -1620,6 +1638,7 @@ function render(){
   document.getElementById('statDelivered').textContent = delivered.length;
   document.getElementById('statTotal').textContent = fmt(tlTotal);
   document.getElementById('statCancelled').textContent = cancelled.length;
+  renderReceivedPanel();
 
   const forexNote = document.getElementById('forexNote');
   const forexKeys = Object.keys(forexTotals);
@@ -1674,9 +1693,9 @@ function paymentBadge(o){
   const mismatch = getOrderMismatch(o);
   if(mismatch){
     if(mismatch > 0){
-      base += ' <span class="badge" style="background:#DFF5E3;color:#146c2e;">💰 تیپ (خودکار) +' + fmt(mismatch) + ' TL</span>';
+      base += ' <span class="badge" style="background:var(--tip-bg);color:var(--tip-ink);">💰 تیپ (خودکار) +' + fmt(mismatch) + ' TL</span>';
     } else {
-      base += ' <span class="badge" style="background:#FCEBEB;color:#791F1F;">⚠ کسری ' + fmt(mismatch) + ' TL</span>';
+      base += ' <span class="badge" style="background:var(--deficit-bg);color:var(--deficit-ink);">⚠ کسری ' + fmt(mismatch) + ' TL</span>';
     }
   }
   return base;
@@ -1902,7 +1921,7 @@ function autoSaveAddressToLocations(name, address, mapLink){
   } else {
     list.push({
       id: 'loc_' + Date.now() + '_' + Math.random().toString(36).slice(2,7),
-      name: (name || '').trim() || ('لوکیشن ' + new Date().toLocaleDateString('fa-IR')),
+      name: (name || '').trim() || ('لوکیشن ' + new Date().toLocaleDateString('fa-IR-u-ca-gregory')),
       address: address.trim(),
       mapLink: mapLink || null
     });
@@ -1965,13 +1984,13 @@ function startNewOrderFlow(){
       </div>
       <p style="font-size:14px;line-height:1.7;">عکس فیش رو از کجا بگیرم؟</p>
       <div class="save-bar">
-        <button class="save" onclick="closeModal();document.getElementById('newOrderCameraInput').click()">📷 دوربین (عکس جدید بگیر)</button>
+        <button class="save" onclick="closeModal();document.getElementById('newOrderCameraInput').click()">📷 دوربین</button>
       </div>
       <div class="save-bar">
-        <button class="cancel" onclick="closeModal();document.getElementById('newOrderGalleryInput').click()">🖼 از گالری (عکسی که از قبل دارم)</button>
+        <button class="cancel" onclick="closeModal();document.getElementById('newOrderGalleryInput').click()">🖼 از گالری</button>
       </div>
       <div class="save-bar">
-        <button class="cancel" onclick="openOrderModal(null)">✏️ ورود دستی (بدون عکس)</button>
+        <button class="cancel" onclick="openOrderModal(null)">✏️ ورود دستی</button>
       </div>
     </div>
   </div>`;
@@ -2072,11 +2091,11 @@ function openOrderModal(existing){
       <textarea id="f_address" style="margin-top:5px;" oninput="scheduleDraftSave();checkCaesarBlockMatch();scheduleCustomerCheck()">${escapeHtml(o.address||'')}</textarea>
       <div id="caesarMatchBanner"></div>
       <div style="display:flex;gap:8px;margin-top:6px;flex-wrap:wrap;">
-        <button type="button" onclick="pickLocationForOrder()" style="background:var(--card2);border:1px solid var(--line);color:var(--text);font-size:11.5px;padding:6px 10px;border-radius:8px;font-family:inherit;">📍 انتخاب از لوکیشن‌های ذخیره‌شده</button>
+        <button type="button" onclick="pickLocationForOrder()" class="mini-btn">📍 انتخاب از لوکیشن‌های ذخیره‌شده</button>
       </div>
       <div style="display:flex;gap:8px;margin-top:6px;flex-wrap:wrap;">
-        <button type="button" onclick="openGoogleMapsExplicit(capturedQrLink || document.getElementById('f_address').value)" style="background:var(--card2);border:1px solid var(--line);color:var(--text);font-size:11.5px;padding:6px 10px;border-radius:8px;font-family:inherit;">🗺️ گوگل‌مپ</button>
-        <button type="button" onclick="openWaze(capturedQrLink || document.getElementById('f_address').value)" style="background:var(--card2);border:1px solid var(--line);color:var(--text);font-size:11.5px;padding:6px 10px;border-radius:8px;font-family:inherit;">🧭 Waze</button>
+        <button type="button" onclick="openGoogleMapsExplicit(capturedQrLink || document.getElementById('f_address').value)" class="mini-btn">🗺️ گوگل‌مپ</button>
+        <button type="button" onclick="openWaze(capturedQrLink || document.getElementById('f_address').value)" class="mini-btn">🧭 Waze</button>
       </div>
       <label style="margin-top:6px;font-size:12px;">یا لینک لوکیشن واتس‌اپ رو اینجا نگه‌دار و Paste کن</label>
       <input type="text" id="order_paste_link" placeholder="اینجا لمس کن، نگه‌دار، Paste بزن..." oninput="onOrderLinkPasteInput()" style="direction:ltr;text-align:left;margin-top:4px;">
@@ -2084,8 +2103,8 @@ function openOrderModal(existing){
       <label style="margin-top:12px;">تلفن</label>
       <input type="tel" id="f_phone" style="margin-top:5px;" value="${escapeHtml(o.phone||'')}" oninput="showDuplicateWarning(findDuplicateOrder());scheduleDraftSave();scheduleCustomerCheck()">
       <div style="display:flex;gap:8px;margin-top:6px;flex-wrap:wrap;">
-        <button type="button" onclick="callCustomer()" style="background:var(--card2);border:1px solid var(--line);color:var(--text);font-size:11.5px;padding:6px 10px;border-radius:8px;font-family:inherit;">📞 تماس مستقیم</button>
-        <button type="button" onclick="whatsappCustomer()" style="background:var(--card2);border:1px solid var(--line);color:var(--text);font-size:11.5px;padding:6px 10px;border-radius:8px;font-family:inherit;">💬 واتساپ</button>
+        <button type="button" onclick="callCustomer()" class="mini-btn">📞 تماس مستقیم</button>
+        <button type="button" onclick="whatsappCustomer()" class="mini-btn">💬 واتساپ</button>
       </div>
       <div id="customerMatchBanner"></div>
 
@@ -3159,15 +3178,36 @@ function showDeliveredList(){
   </div>`;
 }
 
-function showReceivedBreakdown(){
+let receivedPanelVisible = localStorage.getItem('received_panel_visible') !== 'false';
+
+function toggleReceivedPanel(){
+  receivedPanelVisible = !receivedPanelVisible;
+  localStorage.setItem('received_panel_visible', receivedPanelVisible ? 'true' : 'false');
+  renderReceivedPanel();
+}
+
+function renderReceivedPanel(){
+  const body = document.getElementById('receivedPanelBody');
+  const btn = document.getElementById('receivedToggleBtn');
+  if(!body) return;
+
+  if(!receivedPanelVisible){
+    body.style.display = 'none';
+    if(btn) btn.textContent = 'نمایش بده';
+    return;
+  }
+  if(btn) btn.textContent = 'مخفی کن';
+  body.style.display = '';
+
   const delivered = currentOrders.filter(o => o.status === 'delivered');
-  let orderAmountTotal = 0;
-  let cashTL = 0, cardTotal = 0, transferTotal = 0, tipTotal = 0;
+  let cashTL = 0, cardTotal = 0, transferTotal = 0, tipTotal = 0, onlineTotal = 0;
   const forexByCurrency = {};
 
   delivered.forEach(o => {
-    orderAmountTotal += Number(o.amount) || 0;
-    getOrderPayments(o).forEach(p => {
+    const payments = getOrderPayments(o);
+    const hasOnline = payments.some(p => p.method === 'آنلاین');
+    if(hasOnline) onlineTotal += Number(o.amount) || 0;
+    payments.forEach(p => {
       if(p.method === 'نقد') cashTL += Number(p.amountTL) || 0;
       else if(p.method === 'کارت') cardTotal += Number(p.amountTL) || 0;
       else if(p.method === 'واریز') transferTotal += Number(p.amountTL) || 0;
@@ -3184,25 +3224,17 @@ function showReceivedBreakdown(){
 
   const forexLines = Object.keys(forexByCurrency).map(code => {
     const f = forexByCurrency[code];
-    return `<div class="report-line"><span>ارز — ${escapeHtml(code)}</span><b>${fmt(f.amount)} ${currencySymbol(code)} (≈${fmt(f.tlEquivalent)} TL)</b></div>`;
+    return `<div class="received-line"><span>ارز — ${escapeHtml(code)}</span><b>${fmt(f.amount)} ${currencySymbol(code)} (≈${fmt(f.tlEquivalent)} TL)</b></div>`;
   }).join('');
 
-  const root = document.getElementById('modalRoot');
-  root.innerHTML = `
-  <div class="overlay">
-    <div class="sheet">
-      <div class="sheet-head">
-        <h2>ریز مبلغ دریافتی</h2>
-        <button class="close-x" onclick="closeModal()">×</button>
-      </div>
-      <div class="report-line"><span>کل مبلغ سفارش‌ها (تا آخرین سفارش تحویلی)</span><b>${fmt(orderAmountTotal)} TL</b></div>
-      <div class="report-line"><span>نقد (لیر)</span><b>${fmt(cashTL)} TL</b></div>
-      ${forexLines}
-      <div class="report-line"><span>کارت</span><b>${fmt(cardTotal)} TL</b></div>
-      <div class="report-line"><span>واریز به حساب</span><b>${fmt(transferTotal)} TL</b></div>
-      ${tipTotal > 0 ? `<div class="report-line"><span style="color:#146c2e;">💰 تیپ خودکار</span><b style="color:#146c2e;">+${fmt(tipTotal)} TL</b></div>` : ''}
-    </div>
-  </div>`;
+  body.innerHTML = `
+    <div class="received-line"><span>نقد (لیر)</span><b>${fmt(cashTL)} TL</b></div>
+    ${forexLines}
+    <div class="received-line"><span>کارت</span><b>${fmt(cardTotal)} TL</b></div>
+    <div class="received-line"><span>واریز به حساب</span><b>${fmt(transferTotal)} TL</b></div>
+    ${onlineTotal > 0 ? `<div class="received-line"><span>پرداخت آنلاین (از قبل پرداخت شده)</span><b>${fmt(onlineTotal)} TL</b></div>` : ''}
+    ${tipTotal > 0 ? `<div class="received-line" style="color:var(--tip-ink);"><span>💰 تیپ خودکار</span><b>+${fmt(tipTotal)} TL</b></div>` : ''}
+  `;
 }
 
 function openReport(){
@@ -3249,8 +3281,8 @@ function renderReportSheet(orders, dayKey, isToday, isSingleDay){
       <div class="report-line"><span>نقد</span><b>${fmt(cashTotal)} TL</b></div>
       <div class="report-line"><span>کارت</span><b>${fmt(cardTotal)} TL</b></div>
       <div class="report-line"><span>واریز</span><b>${fmt(transferTotal)} TL</b></div>
-      ${tipTotal > 0 ? `<div class="report-line"><span style="color:#146c2e;">💰 تیپ خودکار (از اضافه‌دریافتی‌ها)</span><b style="color:#146c2e;">+${fmt(tipTotal)} TL</b></div>` : ''}
-      ${shortfallTotal > 0 ? `<div class="report-line"><span style="color:#791F1F;">⚠ کسری (کمتر از فیش دریافت شده)</span><b style="color:#791F1F;">-${fmt(shortfallTotal)} TL</b></div>` : ''}
+      ${tipTotal > 0 ? `<div class="report-line"><span style="color:var(--tip-ink);">💰 تیپ خودکار (از اضافه‌دریافتی‌ها)</span><b style="color:var(--tip-ink);">+${fmt(tipTotal)} TL</b></div>` : ''}
+      ${shortfallTotal > 0 ? `<div class="report-line"><span style="color:var(--deficit-ink);">⚠ کسری (کمتر از فیش دریافت شده)</span><b style="color:var(--deficit-ink);">-${fmt(shortfallTotal)} TL</b></div>` : ''}
       <div id="expensesReportLine"></div>
       ${Object.keys(forexTotals).map(k => `<div class="report-line"><span>ارز (${k})</span><b>${fmt(forexTotals[k])}${currencySymbol(k)}</b></div>`).join('')}
       <div class="report-total"><span>مجموع لیر</span><span>${fmt(grandTotal)} TL</span></div>
