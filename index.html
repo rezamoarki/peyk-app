@@ -197,7 +197,6 @@ textarea{min-height:64px;resize:vertical;}
 <div class="fab-row">
   <div class="fab-inner">
     <button class="fab secondary" id="historyBtn">تاریخچه</button>
-    <button class="fab secondary" id="reportBtn">گزارش</button>
     <button class="fab primary" id="addBtn">+ سفارش جدید</button>
   </div>
 </div>
@@ -211,7 +210,7 @@ textarea{min-height:64px;resize:vertical;}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script>
-const APP_VERSION = 'v6.5 · 2026-08-10';
+const APP_VERSION = 'v6.6 · 2026-08-10';
 const STORAGE_KEY_PREFIX = 'orders:';
 const EXPENSE_KEY_PREFIX = 'expenses:';
 const EXPENSE_CATEGORIES = ['بنزین', 'خرید فروشگاهی', 'سایر'];
@@ -368,6 +367,7 @@ let capturedImageBase64 = null;
 let capturedImageMedia = null;
 let capturedQrLink = null;
 let capturedReceiptTime = null;
+let capturedPaidOnlineHint = false;
 let capturedPhotoHash = null;
 
 let payingOrderId = null;
@@ -2058,6 +2058,7 @@ function openOrderModal(existing){
   const draft = (!existing) ? getDraft() : null;
   capturedQrLink = existing && existing.mapLink ? existing.mapLink : (draft ? draft.mapLink : null);
   capturedReceiptTime = null;
+  capturedPaidOnlineHint = existing ? !!existing.paidOnlineHint : false;
   capturedPhotoHash = null;
   const o = existing || draft || { name:'', address:'', phone:'', amount:'', source:'', notes:'', orderNo:'', items:'' };
 
@@ -2236,6 +2237,7 @@ function resizeImageDataUrl(dataUrl, maxDim){
 async function loadPhotoFromBlob(blob){
   capturedQrLink = null;
   capturedReceiptTime = null;
+  capturedPaidOnlineHint = false;
   const reader = new FileReader();
   reader.onload = async () => {
     const originalDataUrl = reader.result;
@@ -2421,9 +2423,9 @@ function buildReceiptPrompt(){
   const timeNote = `\nمهم: ساعت واقعی سفارش رو هم پیدا کن — توی رسیدهای Feed Me جلوی "Sip. Zamanı:" داخل پرانتز (مثلاً 17.07.2026 (21:22) یعنی ساعت 21:22)، توی رسیدهای RIOVERDE جلوی "SAAT:" (مثلاً SAAT:20:40:00 یعنی ساعت 20:40). این ساعت رو دقیقاً به فرمت HH:MM برگردون، نه ساعتی که الان هست.`;
   const receiptCheckNote = `\nمهم: اول بررسی کن این عکس اصلاً یه رسید سفارش رستوران (Feed Me یا RIOVERDE) هست یا نه. اگه این عکس چیز دیگه‌ایه (مثلاً سلفی، عکس خیابون، صفحه‌ی گوشی، یا هر چیز نامرتبط دیگه)، فیلد isReceipt رو false بذار و بقیه‌ی فیلدها رو خالی بذار — هیچی حدس نزن.`;
   return `این عکس یک رسید سفارش رستوران سوشی (به ترکی) است. دو نوع رسید ممکن است باشد: رسیدهای "Feed Me" که شامل نام مشتری، Telefon، Adres، Ürün و Fatura (مبلغ نهایی) است، یا رسید داخلی رستوران "RIOVERDE" که شامل Genel Toplam / Kalan Odeme به عنوان مبلغ نهایی است و ممکن است شماره تلفن یا آدرس با خط دست روی آن نوشته شده باشد.${receiptCheckNote}${qrNote}${phoneNote}${masaNote}${timeNote}
-نوع پرداخت را استخراج نکن، چون قابل اعتماد نیست و بعداً موقع تحویل توسط پیک ثبت می‌شود.
+نوع پرداخت (نقد/کارت) را استخراج نکن، چون قابل اعتماد نیست و بعداً موقع تحویل توسط پیک ثبت می‌شود. ولی اگه خود رسید صریحاً نشون می‌ده که سفارش از قبل و آنلاین پرداخت شده (مثلاً نوشته "Online Ödeme"، "Ödendi"، "Kredi Kartı (Online)" یا هر عبارت مشابهی که یعنی پول از قبل گرفته شده و پیک نیازی به دریافت وجه نداره)، این رو توی فیلد paidOnline مشخص کن.
 اطلاعات زیر را استخراج کن و فقط یک JSON خام (بدون توضیح، بدون markdown) با این کلیدها برگردان:
-{"isReceipt": true یا false, "name": "نام مشتری، یا برای RIOVERDE: Masa <شماره میز>", "address": "آدرس کامل، اگر جمله‌ای در متن تکرار شده حذفش کن و فقط یک بار بنویس", "phone": "شماره تلفن مشتری یا خالی", "amount": عدد مبلغ نهایی قابل پرداخت بدون واحد, "source": "Feed Me یا تلفن رستوران", "notes": "تمام یادداشت‌ها و توضیحات نوشته‌شده روی رسید (چه چاپی چه دست‌نویس) رو کامل و بدون خلاصه‌کردن بردار — نه فقط بخشی از اون. اگه به ترکی یا زبان دیگه‌ای نوشته شده، کل متن رو کامل به فارسی ترجمه کن، چیزی رو حذف یا کوتاه نکن", "orderNo": "شماره سفارش (Sip. No) یا خالی", "items": "لیست کامل اقلام سفارش با تعداد و قیمت هرکدوم، خط به خط، دقیقا مطابق رسید", "orderTime": "ساعت سفارش به فرمت HH:MM از روی خود رسید، یا خالی اگه پیدا نشد"}
+{"isReceipt": true یا false, "name": "نام مشتری، یا برای RIOVERDE: Masa <شماره میز>", "address": "آدرس کامل، اگر جمله‌ای در متن تکرار شده حذفش کن و فقط یک بار بنویس", "phone": "شماره تلفن مشتری یا خالی", "amount": عدد مبلغ نهایی قابل پرداخت بدون واحد, "source": "Feed Me یا تلفن رستوران", "notes": "تمام یادداشت‌ها و توضیحات نوشته‌شده روی رسید (چه چاپی چه دست‌نویس) رو کامل و بدون خلاصه‌کردن بردار — نه فقط بخشی از اون. اگه به ترکی یا زبان دیگه‌ای نوشته شده، کل متن رو کامل به فارسی ترجمه کن، چیزی رو حذف یا کوتاه نکن", "orderNo": "شماره سفارش (Sip. No) یا خالی", "items": "لیست کامل اقلام سفارش با تعداد و قیمت هرکدوم، خط به خط، دقیقا مطابق رسید", "orderTime": "ساعت سفارش به فرمت HH:MM از روی خود رسید، یا خالی اگه پیدا نشد", "paidOnline": true یا false — فقط اگه رسید صریحاً نشون بده از قبل آنلاین پرداخت شده، وگرنه false}
 اگر مبلغی به صورت دست‌نویس یا در پایین رسید نوشته شده (مثل Yalnız ... 'dir) همان را به عنوان مبلغ نهایی در نظر بگیر. آدرس یا تلفن دست‌نویس را هم اگر بود لحاظ کن. فقط JSON خام برگردان.`;
 }
 
@@ -2431,6 +2433,7 @@ function applyExtractedFields(parsed){
   if(parsed.isReceipt === false){
     return false;
   }
+  if(parsed.paidOnline === true) capturedPaidOnlineHint = true;
   if(parsed.orderTime){
     const mins = timeStringToMinutes(parsed.orderTime);
     if(mins != null) capturedReceiptTime = mins;
@@ -2457,6 +2460,7 @@ const GEMINI_SCHEMA = {
   type: "OBJECT",
   properties: {
     isReceipt: { type: "BOOLEAN" },
+    paidOnline: { type: "BOOLEAN" },
     name: { type: "STRING" },
     address: { type: "STRING" },
     phone: { type: "STRING" },
@@ -2654,7 +2658,7 @@ async function saveOrderForm(forceSave){
   if(editingId){
     const idx = currentOrders.findIndex(x => x.id === editingId);
     if(idx > -1){
-      currentOrders[idx] = { ...currentOrders[idx], name, address, phone, amount, source, notes, orderNo, items, mapLink, photoHash, incomplete, receiptPhoto, receiptPhotoMedia };
+      currentOrders[idx] = { ...currentOrders[idx], name, address, phone, amount, source, notes, orderNo, items, mapLink, photoHash, incomplete, receiptPhoto, receiptPhotoMedia, paidOnlineHint: capturedPaidOnlineHint || currentOrders[idx].paidOnlineHint || false };
     }
   } else {
     const priorityValue = capturedReceiptTime != null ? capturedReceiptTime : nowMinutes();
@@ -2663,6 +2667,7 @@ async function saveOrderForm(forceSave){
       id: 'o_' + Date.now() + '_' + Math.random().toString(36).slice(2,7),
       time: displayTime,
       name, address, phone, amount, source, notes, orderNo, items, mapLink, photoHash, incomplete, receiptPhoto, receiptPhotoMedia,
+      paidOnlineHint: capturedPaidOnlineHint,
       status: 'pending', priority: priorityValue, payment: null
     });
   }
@@ -2675,7 +2680,7 @@ async function saveOrderForm(forceSave){
 
 function legacyPaymentToDraft(o){
   const draft = {
-    online: { used:false, note:'', posPhoto:null, posMedia:null },
+    online: { used: !!o.paidOnlineHint, note:'', posPhoto:null, posMedia:null },
     cards: [{ amountTL:'', posPhoto:null, posMedia:null }],
     cashTL: '',
     forex: [],
@@ -3281,6 +3286,9 @@ function renderReceivedPanel(){
     return `<div class="received-line"><span>ارز — ${escapeHtml(code)}</span><b>${fmt(f.amount)} ${currencySymbol(code)} (≈${fmt(f.tlEquivalent)} TL)</b></div>`;
   }).join('');
 
+  const forexTlTotal = Object.values(forexByCurrency).reduce((s,f) => s + (f.tlEquivalent||0), 0);
+  const grandTotal = cashTL + cardTotal + transferTotal + forexTlTotal;
+
   body.innerHTML = `
     <div class="received-line"><span>نقد (لیر)</span><b>${fmt(cashTL)} TL</b></div>
     ${forexLines}
@@ -3288,11 +3296,8 @@ function renderReceivedPanel(){
     <div class="received-line"><span>واریز به حساب</span><b>${fmt(transferTotal)} TL</b></div>
     ${onlineTotal > 0 ? `<div class="received-line"><span>پرداخت آنلاین (از قبل پرداخت شده)</span><b>${fmt(onlineTotal)} TL</b></div>` : ''}
     ${tipTotal > 0 ? `<div class="received-line" style="color:var(--tip-ink);"><span>💰 تیپ خودکار</span><b>+${fmt(tipTotal)} TL</b></div>` : ''}
+    <div class="received-line" style="font-weight:700;border-top:2px solid var(--line);margin-top:4px;padding-top:8px;"><span>جمع کل دریافتی</span><b>${fmt(grandTotal)} TL</b></div>
   `;
-}
-
-function openReport(){
-  renderReportSheet(currentOrders, todayKey(), true);
 }
 
 function renderReportSheet(orders, dayKey, isToday, isSingleDay){
@@ -3597,11 +3602,7 @@ function renderHistoryList(items){
   `).join('');
 
   const rangeBtnHolder = document.getElementById('histRangeReportBtn');
-  if(items.length > 1){
-    rangeBtnHolder.innerHTML = `<button class="fab secondary" style="width:100%;margin-top:4px;" onclick="openRangeReport()">گزارش کل این بازه (${items.length} روز)</button>`;
-  } else {
-    rangeBtnHolder.innerHTML = '';
-  }
+  if(rangeBtnHolder) rangeBtnHolder.innerHTML = '';
 }
 
 function applyHistoryFilter(){
@@ -3621,22 +3622,6 @@ function clearHistoryFilter(){
   document.getElementById('histFrom').value = '';
   document.getElementById('histTo').value = '';
   renderHistoryList(window._historyCache || []);
-}
-
-function openRangeReport(){
-  const from = document.getElementById('histFrom').value;
-  const to = document.getElementById('histTo').value;
-  const all = window._historyCache || [];
-  const filtered = all.filter(it => {
-    const d = it.key.replace(STORAGE_KEY_PREFIX,'');
-    if(from && d < from) return false;
-    if(to && d > to) return false;
-    return true;
-  });
-  let combined = [];
-  filtered.forEach(it => { combined = combined.concat(it.orders); });
-  const label = (from || 'ابتدا') + ' تا ' + (to || 'انتها');
-  renderReportSheet(combined, STORAGE_KEY_PREFIX + label, false, false);
 }
 
 function confirmDeleteHistoryDay(key){
@@ -3673,7 +3658,6 @@ function openHistoryDay(key){
 }
 
 document.getElementById('addBtn').addEventListener('click', startNewOrderFlow);
-document.getElementById('reportBtn').addEventListener('click', openReport);
 document.getElementById('historyBtn').addEventListener('click', openHistory);
 document.getElementById('expensesBtn').addEventListener('click', openExpensesManager);
 document.getElementById('settingsBtn').addEventListener('click', openSettings);
