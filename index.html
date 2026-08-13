@@ -210,7 +210,7 @@ textarea{min-height:64px;resize:vertical;}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script>
-const APP_VERSION = 'v6.6 · 2026-08-10';
+const APP_VERSION = 'v6.7 · 2026-08-10';
 const STORAGE_KEY_PREFIX = 'orders:';
 const EXPENSE_KEY_PREFIX = 'expenses:';
 const EXPENSE_CATEGORIES = ['بنزین', 'خرید فروشگاهی', 'سایر'];
@@ -1901,10 +1901,17 @@ function editOrder(id){
   openOrderModal(o);
 }
 
+function refreshAfterOrderChange(){
+  render();
+  if(currentListView === 'queue') showQueueList();
+  else if(currentListView === 'delivered') showDeliveredList();
+  else if(currentListView === 'cancelled') showCancelledList();
+}
+
 async function deleteOrder(id){
   currentOrders = currentOrders.filter(x => x.id !== id);
   await saveOrders();
-  render();
+  refreshAfterOrderChange();
   toast('سفارش حذف شد');
 }
 
@@ -1943,11 +1950,12 @@ async function cancelOrder(id){
     cancelledAtTs: Date.now()
   };
   await saveOrders();
-  render();
+  refreshAfterOrderChange();
   toast('سفارش کنسل شد — آدرسش برای بعد ذخیره شد');
 }
 
 function showCancelledList(){
+  currentListView = 'cancelled';
   const cancelled = currentOrders.filter(o => o.status === 'cancelled').slice().sort((a,b) => (b.cancelledAtTs||0) - (a.cancelledAtTs||0));
   const root = document.getElementById('modalRoot');
   root.innerHTML = `
@@ -2158,9 +2166,12 @@ function getChipValue(groupId){
   return active ? active.dataset.val : '';
 }
 
+let currentListView = null;
+
 function closeModal(){
   document.getElementById('modalRoot').innerHTML = '';
   editingId = null;
+  currentListView = null;
 }
 
 function cancelOrderModal(){
@@ -3206,6 +3217,7 @@ async function confirmDelivery(){
 }
 
 function showQueueList(){
+  currentListView = 'queue';
   const pending = currentOrders.filter(o => o.status !== 'delivered' && o.status !== 'cancelled').sort((a,b) => (a.priority||0) - (b.priority||0));
   const root = document.getElementById('modalRoot');
   root.innerHTML = `
@@ -3222,6 +3234,7 @@ function showQueueList(){
 }
 
 function showDeliveredList(){
+  currentListView = 'delivered';
   const delivered = currentOrders.filter(o => o.status === 'delivered').slice().sort((a,b) => (a.deliveredAtTs||0) - (b.deliveredAtTs||0));
   const root = document.getElementById('modalRoot');
   root.innerHTML = `
