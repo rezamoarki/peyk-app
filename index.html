@@ -210,7 +210,7 @@ textarea{min-height:64px;resize:vertical;}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script>
-const APP_VERSION = 'v6.7 · 2026-08-10';
+const APP_VERSION = 'v6.9 · 2026-08-10';
 const STORAGE_KEY_PREFIX = 'orders:';
 const EXPENSE_KEY_PREFIX = 'expenses:';
 const EXPENSE_CATEGORIES = ['بنزین', 'خرید فروشگاهی', 'سایر'];
@@ -430,6 +430,13 @@ function findCaesarBlockMatch(text){
     }
   }
   return null;
+}
+
+function getNavQueryForAddress(addressText, mapLink){
+  if(mapLink) return mapLink;
+  const block = findCaesarBlockMatch(addressText);
+  if(block) return block.name;
+  return addressText;
 }
 
 let customerCheckTimer = null;
@@ -660,7 +667,7 @@ function locationCardHtml(l){
         <div class="order-name">${escapeHtml(l.name)}</div>
         <div class="order-addr">${escapeHtml(l.address || '')}${l.mapLink ? ' <span style="color:var(--teal);">(لینک نقشه دارد)</span>' : ''}</div>
         <div class="order-actions">
-          <button onclick="openMap('${escapeJs(l.mapLink || l.address || '')}')">نقشه</button>
+          <button onclick="openMap(getNavQueryForAddress('${escapeJs(l.address||'')}', ${l.mapLink ? `'${escapeJs(l.mapLink)}'` : 'null'}))">نقشه</button>
           <button onclick="openLocationForm('${l.id}')">ویرایش</button>
           <button class="danger" onclick="confirmDeleteLocation('${l.id}')">حذف</button>
         </div>
@@ -1826,7 +1833,7 @@ function startMovingToOrder(orderId, app){
     saveOrders();
   }
   const o = currentOrders[idx];
-  const target = o.mapLink || o.address || '';
+  const target = getNavQueryForAddress(o.address || '', o.mapLink);
   if(app === 'waze') openWaze(target);
   else if(app === 'google') openGoogleMapsExplicit(target);
   else openMap(target);
@@ -2104,8 +2111,8 @@ function openOrderModal(existing){
         <button type="button" onclick="pickLocationForOrder()" class="mini-btn">📍 انتخاب از لوکیشن‌های ذخیره‌شده</button>
       </div>
       <div style="display:flex;gap:8px;margin-top:6px;flex-wrap:wrap;">
-        <button type="button" onclick="openGoogleMapsExplicit(capturedQrLink || document.getElementById('f_address').value)" class="mini-btn">🗺️ گوگل‌مپ</button>
-        <button type="button" onclick="openWaze(capturedQrLink || document.getElementById('f_address').value)" class="mini-btn">🧭 Waze</button>
+        <button type="button" onclick="openGoogleMapsExplicit(getNavQueryForAddress(document.getElementById('f_address').value, capturedQrLink))" class="mini-btn">🗺️ گوگل‌مپ</button>
+        <button type="button" onclick="openWaze(getNavQueryForAddress(document.getElementById('f_address').value, capturedQrLink))" class="mini-btn">🧭 Waze</button>
       </div>
       <label style="margin-top:6px;font-size:12px;">یا لینک لوکیشن واتس‌اپ رو اینجا نگه‌دار و Paste کن</label>
       <input type="text" id="order_paste_link" placeholder="اینجا لمس کن، نگه‌دار، Paste بزن..." oninput="onOrderLinkPasteInput()" style="direction:ltr;text-align:left;margin-top:4px;">
