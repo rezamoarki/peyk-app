@@ -210,7 +210,7 @@ textarea{min-height:64px;resize:vertical;}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script>
-const APP_VERSION = 'v6.9 · 2026-08-10';
+const APP_VERSION = 'v7.0 · 2026-08-10';
 const STORAGE_KEY_PREFIX = 'orders:';
 const EXPENSE_KEY_PREFIX = 'expenses:';
 const EXPENSE_CATEGORIES = ['بنزین', 'خرید فروشگاهی', 'سایر'];
@@ -1913,6 +1913,7 @@ function refreshAfterOrderChange(){
   if(currentListView === 'queue') showQueueList();
   else if(currentListView === 'delivered') showDeliveredList();
   else if(currentListView === 'cancelled') showCancelledList();
+  else closeModal();
 }
 
 async function deleteOrder(id){
@@ -2183,7 +2184,7 @@ function closeModal(){
 
 function cancelOrderModal(){
   clearDraft();
-  closeModal();
+  refreshAfterOrderChange();
 }
 
 function simpleHash(str){
@@ -2691,8 +2692,7 @@ async function saveOrderForm(forceSave){
   }
   await saveOrders();
   clearDraft();
-  render();
-  closeModal();
+  refreshAfterOrderChange();
   if(!incomplete) toast('سفارش ذخیره شد');
 }
 
