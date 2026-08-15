@@ -210,7 +210,7 @@ textarea{min-height:64px;resize:vertical;}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script>
-const APP_VERSION = 'v7.6 · 2026-08-10';
+const APP_VERSION = 'v7.7 · 2026-08-10';
 const STORAGE_KEY_PREFIX = 'orders:';
 const EXPENSE_KEY_PREFIX = 'expenses:';
 const EXPENSE_CATEGORIES = ['بنزین', 'خرید فروشگاهی', 'سایر'];
@@ -2095,10 +2095,10 @@ function openOrderModal(existing){
       </div>
 
       <label>نام مشتری</label>
-      <input type="text" id="f_name" value="${escapeHtml(o.name||'')}" oninput="scheduleDraftSave();scheduleCustomerCheck();updateSaveButtonState()">
+      <input type="text" id="f_name" value="${escapeHtml(o.name||'')}" oninput="updateSaveButtonState();scheduleDraftSave();scheduleCustomerCheck()">
 
       <label style="margin-top:12px;">آدرس</label>
-      <textarea id="f_address" style="margin-top:5px;" oninput="scheduleDraftSave();checkCaesarBlockMatch();scheduleCustomerCheck();updateSaveButtonState()">${escapeHtml(o.address||'')}</textarea>
+      <textarea id="f_address" style="margin-top:5px;" oninput="updateSaveButtonState();scheduleDraftSave();checkCaesarBlockMatch();scheduleCustomerCheck()">${escapeHtml(o.address||'')}</textarea>
       <div id="caesarMatchBanner"></div>
       <div style="display:flex;gap:8px;margin-top:6px;flex-wrap:wrap;">
         <button type="button" onclick="pickLocationForOrder()" class="mini-btn">📍 انتخاب از لوکیشن‌های ذخیره‌شده</button>
@@ -2746,11 +2746,9 @@ async function saveOrderForm(forceSave, silent){
     }
   }
 
-  if(editingId){
-    const idx = currentOrders.findIndex(x => x.id === editingId);
-    if(idx > -1){
-      currentOrders[idx] = { ...currentOrders[idx], name, address, phone, amount, source, notes, orderNo, items, mapLink, photoHash, incomplete, receiptPhoto, receiptPhotoMedia, paidOnlineHint: capturedPaidOnlineHint || currentOrders[idx].paidOnlineHint || false };
-    }
+  const editIdx = editingId ? currentOrders.findIndex(x => x.id === editingId) : -1;
+  if(editingId && editIdx > -1){
+    currentOrders[editIdx] = { ...currentOrders[editIdx], name, address, phone, amount, source, notes, orderNo, items, mapLink, photoHash, incomplete, receiptPhoto, receiptPhotoMedia, paidOnlineHint: capturedPaidOnlineHint || currentOrders[editIdx].paidOnlineHint || false };
   } else {
     const priorityValue = capturedReceiptTime != null ? capturedReceiptTime : nowMinutes();
     const displayTime = capturedReceiptTime != null ? minutesToDisplayTime(capturedReceiptTime) : new Date().toLocaleTimeString('fa-IR', { hour:'2-digit', minute:'2-digit' });
