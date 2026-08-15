@@ -210,7 +210,7 @@ textarea{min-height:64px;resize:vertical;}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script>
-const APP_VERSION = 'v7.0 · 2026-08-10';
+const APP_VERSION = 'v7.3 · 2026-08-10';
 const STORAGE_KEY_PREFIX = 'orders:';
 const EXPENSE_KEY_PREFIX = 'expenses:';
 const EXPENSE_CATEGORIES = ['بنزین', 'خرید فروشگاهی', 'سایر'];
@@ -532,7 +532,7 @@ function checkCaesarBlockMatch(){
     banner.innerHTML = `<div class="order-note" style="margin-top:6px;color:var(--teal);">🏛 بلاک ${block.n} (${block.name}) شناسایی شد — لینک نقشه‌ی ذخیره‌شده پیدا شد.
       <span style="text-decoration:underline;cursor:pointer;color:var(--amber);" onclick="applyCaesarMatch(${block.n})">اعمال لینک نقشه</span></div>`;
   } else {
-    banner.innerHTML = `<div class="order-note" style="margin-top:6px;">🏛 بلاک ${block.n} (${block.name}) شناسایی شد، ولی هنوز لینک نقشه‌ای براش ذخیره نشده. وقتی رسیدی، از «📍 رسیدم اینجا» یا «📷 اسکن QR» استفاده کن تا دفعه‌ی بعد آماده باشه.</div>`;
+    banner.innerHTML = `<div class="order-note" style="margin-top:6px;">🏛 بلاک ${block.n} (${block.name}) شناسایی شد، ولی هنوز لینک نقشه‌ای براش ذخیره نشده. وقتی رسیدی، از «📍 رسیدم اینجا» استفاده کن تا دفعه‌ی بعد آماده باشه.</div>`;
   }
 }
 
@@ -1744,7 +1744,8 @@ function activeOrderCard(o){
       <div class="order-actions">
         <button onclick="startMovingToOrder('${o.id}', 'google')">🗺️ گوگل‌مپ</button>
         <button onclick="startMovingToOrder('${o.id}', 'waze')">🧭 Waze</button>
-        <button onclick="scanQrForOrder('${o.id}')">📷 اسکن QR</button>
+        <button onclick="callOrderCustomer('${o.id}')">📞 تماس</button>
+        <button onclick="whatsappOrderCustomer('${o.id}')">💬 واتساپ</button>
         <button onclick="recordArrivalLocation('${o.id}')">📍 رسیدم اینجا</button>
         ${receiptPhotoButtonHtml(o)}
         <button onclick="editOrder('${o.id}')">ویرایش</button>
@@ -1779,7 +1780,8 @@ function queueOrderCard(o, idx, total){
         ${o.incomplete ? '<span class="badge pending">⚠ ناقص، کاملش کن</span>' : ''}
         <div class="order-actions">
           <button onclick="openMap('${escapeJs(mapTarget)}')">نقشه</button>
-          <button onclick="scanQrForOrder('${o.id}')">📷 اسکن QR</button>
+          <button onclick="callOrderCustomer('${o.id}')">📞 تماس</button>
+          <button onclick="whatsappOrderCustomer('${o.id}')">💬 واتساپ</button>
           ${receiptPhotoButtonHtml(o)}
           <button onclick="editOrder('${o.id}')">ویرایش</button>
           <button class="danger" onclick="cancelOrder('${o.id}')">❌ کنسل شد</button>
@@ -1823,6 +1825,7 @@ async function moveOrderPriority(id, dir){
   pending[swapIdx].priority = tmp;
   await saveOrders();
   render();
+  if(currentListView === 'queue') showQueueList();
 }
 
 function startMovingToOrder(orderId, app){
@@ -1837,17 +1840,6 @@ function startMovingToOrder(orderId, app){
   if(app === 'waze') openWaze(target);
   else if(app === 'google') openGoogleMapsExplicit(target);
   else openMap(target);
-}
-
-function scanQrForOrder(orderId){
-  startQrScanner(async (link) => {
-    const idx = currentOrders.findIndex(x => x.id === orderId);
-    if(idx === -1) return;
-    currentOrders[idx] = { ...currentOrders[idx], mapLink: link };
-    await saveOrders();
-    render();
-    openMap(link);
-  });
 }
 
 function recordArrivalLocation(orderId){
@@ -2120,10 +2112,6 @@ function openOrderModal(existing){
 
       <label style="margin-top:12px;">تلفن</label>
       <input type="tel" id="f_phone" style="margin-top:5px;" value="${escapeHtml(o.phone||'')}" oninput="showDuplicateWarning(findDuplicateOrder());scheduleDraftSave();scheduleCustomerCheck()">
-      <div style="display:flex;gap:8px;margin-top:6px;flex-wrap:wrap;">
-        <button type="button" onclick="callCustomer()" class="mini-btn">📞 تماس مستقیم</button>
-        <button type="button" onclick="whatsappCustomer()" class="mini-btn">💬 واتساپ</button>
-      </div>
       <div id="customerMatchBanner"></div>
 
       <label style="margin-top:12px;">منبع سفارش</label>
@@ -2145,10 +2133,11 @@ function openOrderModal(existing){
       <textarea id="f_notes" oninput="scheduleDraftSave()">${escapeHtml(o.notes||'')}</textarea>
 
       <div id="dupWarning" class="dup-warning" style="display:none;"></div>
+      <div id="autoSaveStatus" class="order-note" style="color:var(--teal);"></div>
 
       <div class="save-bar">
         <button class="cancel" onclick="cancelOrderModal()">انصراف</button>
-        <button class="save" onclick="saveOrderForm()">ذخیره سفارش</button>
+        <button class="save" id="orderSaveBtn" onclick="saveOrderForm()">ذخیره سفارش</button>
       </div>
     </div>
   </div>`;
@@ -2407,17 +2396,19 @@ function normalizePhoneForDialing(phone){
   return digits;
 }
 
-function callCustomer(){
-  const phone = (document.getElementById('f_phone') || {}).value || '';
-  const digits = normalizePhoneForDialing(phone);
-  if(!digits){ toast('شماره تلفنی وارد نشده'); return; }
+function callOrderCustomer(id){
+  const o = currentOrders.find(x => x.id === id);
+  if(!o) return;
+  const digits = normalizePhoneForDialing(o.phone);
+  if(!digits){ toast('شماره تلفنی برای این سفارش ثبت نشده'); return; }
   window.location.href = 'tel:+' + digits;
 }
 
-function whatsappCustomer(){
-  const phone = (document.getElementById('f_phone') || {}).value || '';
-  const digits = normalizePhoneForDialing(phone);
-  if(!digits){ toast('شماره تلفنی وارد نشده'); return; }
+function whatsappOrderCustomer(id){
+  const o = currentOrders.find(x => x.id === id);
+  if(!o) return;
+  const digits = normalizePhoneForDialing(o.phone);
+  if(!digits){ toast('شماره تلفنی برای این سفارش ثبت نشده'); return; }
   window.open('https://wa.me/' + digits, '_blank');
 }
 
@@ -2549,7 +2540,8 @@ async function runGeminiExtract(){
       data.candidates[0].content.parts[0].text : '';
     const parsed = JSON.parse(rawText);
     const ok = applyExtractedFields(parsed);
-    statusEl.textContent = ok ? 'خونده شد (Gemini، رایگان)، لطفا بررسی و تایید کن.' : '⚠ این عکس فیش سفارش به نظر نمی‌رسه — عکس دیگه‌ای امتحان کن یا دستی وارد کن.';
+    statusEl.textContent = ok ? 'خونده شد (Gemini، رایگان) — خودکار ثبت شد، بررسی کن.' : '⚠ این عکس فیش سفارش به نظر نمی‌رسه — عکس دیگه‌ای امتحان کن یا دستی وارد کن.';
+    if(ok) await saveOrderForm(true, true);
   }catch(e){
     statusEl.textContent = 'خطا در اتصال (اینترنت رو چک کن)، دستی وارد کن.';
   }
@@ -2616,7 +2608,8 @@ async function runAiExtract(){
       const stats = addUsage(data.usage.input_tokens, data.usage.output_tokens);
       usageNote = ' (مصرف تا الان: $' + stats.costUSD.toFixed(3) + ')';
     }
-    statusEl.textContent = ok ? ('خونده شد، لطفا بررسی و تایید کن.' + usageNote) : '⚠ این عکس فیش سفارش به نظر نمی‌رسه — عکس دیگه‌ای امتحان کن یا دستی وارد کن.';
+    statusEl.textContent = ok ? ('خونده شد — خودکار ثبت شد، بررسی کن.' + usageNote) : '⚠ این عکس فیش سفارش به نظر نمی‌رسه — عکس دیگه‌ای امتحان کن یا دستی وارد کن.';
+    if(ok) await saveOrderForm(true, true);
   }catch(e){
     statusEl.textContent = 'خطا در اتصال (اینترنت رو چک کن)، دستی وارد کن.';
   }
@@ -2642,7 +2635,7 @@ function closeDuplicateConfirm(){
   if(overlays.length > 1) overlays[overlays.length-1].remove();
 }
 
-async function saveOrderForm(forceSave){
+async function saveOrderForm(forceSave, silent){
   const name = document.getElementById('f_name').value.trim();
   const address = document.getElementById('f_address').value.trim();
   const phone = document.getElementById('f_phone').value.trim();
@@ -2658,15 +2651,15 @@ async function saveOrderForm(forceSave){
   const receiptPhotoMedia = capturedImageBase64 ? capturedImageMedia : (existingForEdit ? existingForEdit.receiptPhotoMedia : null) || null;
 
   if(!address && !name && !capturedImageBase64 && !mapLink){
-    toast('حداقل یه چیز (نام، آدرس یا عکس رسید) لازمه');
+    if(!silent) toast('حداقل یه چیز (نام، آدرس یا عکس رسید) لازمه');
     return;
   }
   const incomplete = !address || !name || amount <= 0;
-  if(incomplete){
+  if(incomplete && !silent){
     toast(amount <= 0 ? 'ثبت شد (بدون مبلغ) — بعداً کاملش کن' : 'ثبت شد (ناقص) — بعداً کاملش کن');
   }
 
-  if(!forceSave){
+  if(!forceSave && !silent){
     const dup = findDuplicateOrder();
     if(dup){
       confirmDuplicateSave(dup);
@@ -2682,18 +2675,38 @@ async function saveOrderForm(forceSave){
   } else {
     const priorityValue = capturedReceiptTime != null ? capturedReceiptTime : nowMinutes();
     const displayTime = capturedReceiptTime != null ? minutesToDisplayTime(capturedReceiptTime) : new Date().toLocaleTimeString('fa-IR', { hour:'2-digit', minute:'2-digit' });
+    const newId = 'o_' + Date.now() + '_' + Math.random().toString(36).slice(2,7);
     currentOrders.push({
-      id: 'o_' + Date.now() + '_' + Math.random().toString(36).slice(2,7),
+      id: newId,
       time: displayTime,
       name, address, phone, amount, source, notes, orderNo, items, mapLink, photoHash, incomplete, receiptPhoto, receiptPhotoMedia,
       paidOnlineHint: capturedPaidOnlineHint,
       status: 'pending', priority: priorityValue, payment: null
     });
+    if(silent) editingId = newId;
   }
   await saveOrders();
   clearDraft();
-  refreshAfterOrderChange();
-  if(!incomplete) toast('سفارش ذخیره شد');
+  if(silent){
+    markOrderAutoSaved();
+  } else {
+    refreshAfterOrderChange();
+    if(!incomplete) toast('سفارش ذخیره شد');
+  }
+}
+
+function markOrderAutoSaved(){
+  const statusEl = document.getElementById('autoSaveStatus');
+  if(statusEl) statusEl.innerHTML = '✓ خودکار توی صف ذخیره شد — هر تغییری هم بدی، با «تایید» ثبت می‌مونه.';
+  const saveBtn = document.getElementById('orderSaveBtn');
+  if(saveBtn){
+    saveBtn.textContent = '✓ تایید';
+    saveBtn.onclick = confirmAutoSavedOrder;
+  }
+}
+
+async function confirmAutoSavedOrder(){
+  await saveOrderForm(true, false);
 }
 
 function legacyPaymentToDraft(o){
