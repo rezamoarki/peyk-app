@@ -210,7 +210,7 @@ textarea{min-height:64px;resize:vertical;}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script>
-const APP_VERSION = 'v7.3 · 2026-08-10';
+const APP_VERSION = 'v7.4 · 2026-08-10';
 const STORAGE_KEY_PREFIX = 'orders:';
 const EXPENSE_KEY_PREFIX = 'expenses:';
 const EXPENSE_CATEGORIES = ['بنزین', 'خرید فروشگاهی', 'سایر'];
@@ -2095,10 +2095,10 @@ function openOrderModal(existing){
       </div>
 
       <label>نام مشتری</label>
-      <input type="text" id="f_name" value="${escapeHtml(o.name||'')}" oninput="scheduleDraftSave();scheduleCustomerCheck()">
+      <input type="text" id="f_name" value="${escapeHtml(o.name||'')}" oninput="scheduleDraftSave();scheduleCustomerCheck();updateSaveButtonState()">
 
       <label style="margin-top:12px;">آدرس</label>
-      <textarea id="f_address" style="margin-top:5px;" oninput="scheduleDraftSave();checkCaesarBlockMatch();scheduleCustomerCheck()">${escapeHtml(o.address||'')}</textarea>
+      <textarea id="f_address" style="margin-top:5px;" oninput="scheduleDraftSave();checkCaesarBlockMatch();scheduleCustomerCheck();updateSaveButtonState()">${escapeHtml(o.address||'')}</textarea>
       <div id="caesarMatchBanner"></div>
       <div style="display:flex;gap:8px;margin-top:6px;flex-wrap:wrap;">
         <button type="button" onclick="pickLocationForOrder()" class="mini-btn">📍 انتخاب از لوکیشن‌های ذخیره‌شده</button>
@@ -2137,13 +2137,13 @@ function openOrderModal(existing){
 
       <div class="save-bar">
         <button class="cancel" onclick="cancelOrderModal()">انصراف</button>
-        <button class="save" id="orderSaveBtn" onclick="saveOrderForm()">ذخیره سفارش</button>
+        <button class="save" id="orderSaveBtn" onclick="saveOrderForm()" ${(!o.name && !o.address && !capturedImageBase64 && !capturedQrLink) ? 'disabled' : ''}>ذخیره سفارش</button>
       </div>
     </div>
   </div>`;
 
   setupChipGroup('srcGroup', o.source);
-  setTimeout(() => { showDuplicateWarning(findDuplicateOrder()); checkCaesarBlockMatch(); scheduleCustomerCheck(); }, 0);
+  setTimeout(() => { showDuplicateWarning(findDuplicateOrder()); checkCaesarBlockMatch(); scheduleCustomerCheck(); updateSaveButtonState(); }, 0);
 }
 
 function setupChipGroup(groupId, activeVal){
@@ -2261,6 +2261,7 @@ async function loadPhotoFromBlob(blob){
     if(aiBtnEl) aiBtnEl.disabled = false;
     const retryBtnEl = document.getElementById('retryGeminiBtn');
     if(retryBtnEl) retryBtnEl.disabled = false;
+    updateSaveButtonState();
     decodeQrFromImage(finalDataUrl);
     showDuplicateWarning(findDuplicateOrder());
     if(getGeminiKey()){
@@ -2635,6 +2636,16 @@ function closeDuplicateConfirm(){
   if(overlays.length > 1) overlays[overlays.length-1].remove();
 }
 
+function updateSaveButtonState(){
+  const btn = document.getElementById('orderSaveBtn');
+  if(!btn) return;
+  if(btn.textContent.includes('تایید')) { btn.disabled = false; return; }
+  const name = ((document.getElementById('f_name')||{}).value || '').trim();
+  const address = ((document.getElementById('f_address')||{}).value || '').trim();
+  const hasMinimum = !!(name || address || capturedImageBase64 || capturedQrLink);
+  btn.disabled = !hasMinimum;
+}
+
 async function saveOrderForm(forceSave, silent){
   const name = document.getElementById('f_name').value.trim();
   const address = document.getElementById('f_address').value.trim();
@@ -2702,6 +2713,7 @@ function markOrderAutoSaved(){
   if(saveBtn){
     saveBtn.textContent = '✓ تایید';
     saveBtn.onclick = confirmAutoSavedOrder;
+    saveBtn.disabled = false;
   }
 }
 
