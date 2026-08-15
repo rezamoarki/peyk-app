@@ -210,7 +210,7 @@ textarea{min-height:64px;resize:vertical;}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script>
-const APP_VERSION = 'v7.4 · 2026-08-10';
+const APP_VERSION = 'v7.5 · 2026-08-10';
 const STORAGE_KEY_PREFIX = 'orders:';
 const EXPENSE_KEY_PREFIX = 'expenses:';
 const EXPENSE_CATEGORIES = ['بنزین', 'خرید فروشگاهی', 'سایر'];
@@ -2542,7 +2542,10 @@ async function runGeminiExtract(){
     const parsed = JSON.parse(rawText);
     const ok = applyExtractedFields(parsed);
     statusEl.textContent = ok ? 'خونده شد (Gemini، رایگان) — خودکار ثبت شد، بررسی کن.' : '⚠ این عکس فیش سفارش به نظر نمی‌رسه — عکس دیگه‌ای امتحان کن یا دستی وارد کن.';
-    if(ok) await saveOrderForm(true, true);
+    if(ok){
+      if(findDuplicateByOrderIdentity()) showAutoSaveDuplicateConfirm();
+      else await saveOrderForm(true, true);
+    }
   }catch(e){
     statusEl.textContent = 'خطا در اتصال (اینترنت رو چک کن)، دستی وارد کن.';
   }
@@ -2610,7 +2613,10 @@ async function runAiExtract(){
       usageNote = ' (مصرف تا الان: $' + stats.costUSD.toFixed(3) + ')';
     }
     statusEl.textContent = ok ? ('خونده شد — خودکار ثبت شد، بررسی کن.' + usageNote) : '⚠ این عکس فیش سفارش به نظر نمی‌رسه — عکس دیگه‌ای امتحان کن یا دستی وارد کن.';
-    if(ok) await saveOrderForm(true, true);
+    if(ok){
+      if(findDuplicateByOrderIdentity()) showAutoSaveDuplicateConfirm();
+      else await saveOrderForm(true, true);
+    }
   }catch(e){
     statusEl.textContent = 'خطا در اتصال (اینترنت رو چک کن)، دستی وارد کن.';
   }
@@ -2634,6 +2640,68 @@ function confirmDuplicateSave(dup){
 function closeDuplicateConfirm(){
   const overlays = document.querySelectorAll('#modalRoot .overlay');
   if(overlays.length > 1) overlays[overlays.length-1].remove();
+}
+
+function findDuplicateByOrderIdentity(){
+  const orderNo = ((document.getElementById('f_orderno')||{}).value || '').trim();
+  const name = ((document.getElementById('f_name')||{}).value || '').trim();
+  const identity = orderNo || name;
+  if(!identity || capturedReceiptTime == null) return null;
+  return currentOrders.find(o => {
+    if(editingId && o.id === editingId) return false;
+    const oIdentity = (o.orderNo && o.orderNo.trim()) || (o.name && o.name.trim()) || '';
+    return oIdentity === identity && o.priority === capturedReceiptTime;
+  }) || null;
+}
+
+function showAutoSaveDuplicateConfirm(){
+  const root = document.getElementById('modalRoot');
+  root.insertAdjacentHTML('beforeend', `
+  <div class="overlay" style="z-index:70;">
+    <div class="sheet" style="max-width:400px;border-radius:16px;">
+      <p style="font-size:14px;line-height:1.7;">⚠ این دقیقاً همون شماره سفارش/میز و همون ساعت یه سفارش دیگه‌ست — به نظر می‌رسه رسید تکراری اسکن شده. مطمئنی می‌خوای ثبتش کنی؟</p>
+      <div class="save-bar">
+        <button class="cancel" onclick="dismissAutoSaveDuplicate()">صرف‌نظر</button>
+        <button class="save" style="background:var(--red);color:#fff" onclick="confirmAndSaveAutoDuplicate()">تایید، ثبت کن</button>
+      </div>
+    </div>
+  </div>`);
+}
+
+async function confirmAndSaveAutoDuplicate(){
+  closeDuplicateConfirm();
+  await saveOrderForm(true, true);
+}
+
+function dismissAutoSaveDuplicate(){
+  closeDuplicateConfirm();
+  resetOrderFormForNewPhoto();
+}
+
+function resetOrderFormForNewPhoto(){
+  ['f_name','f_address','f_phone','f_amount','f_notes','f_orderno','f_items'].forEach(id => {
+    const el = document.getElementById(id);
+    if(el) el.value = '';
+  });
+  document.querySelectorAll('#srcGroup .chip').forEach(b => b.classList.remove('active'));
+  capturedImageBase64 = null;
+  capturedImageMedia = null;
+  capturedQrLink = null;
+  capturedReceiptTime = null;
+  capturedPaidOnlineHint = false;
+  capturedPhotoHash = null;
+  editingId = null;
+  const preview = document.getElementById('photoPreviewWrap');
+  if(preview) preview.innerHTML = '';
+  const aiStatus = document.getElementById('aiStatus');
+  if(aiStatus) aiStatus.textContent = '';
+  const qrStatus = document.getElementById('qrLinkStatus');
+  if(qrStatus){ qrStatus.textContent = 'هنوز لینک نقشه از QR اسکن نشده'; qrStatus.style.color = 'var(--muted)'; }
+  const autoStatus = document.getElementById('autoSaveStatus');
+  if(autoStatus) autoStatus.innerHTML = '';
+  const saveBtn = document.getElementById('orderSaveBtn');
+  if(saveBtn){ saveBtn.textContent = 'ذخیره سفارش'; saveBtn.onclick = saveOrderForm; saveBtn.disabled = true; }
+  clearDraft();
 }
 
 function updateSaveButtonState(){
