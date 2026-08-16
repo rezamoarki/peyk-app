@@ -211,7 +211,7 @@ textarea{min-height:64px;resize:vertical;}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script>
-const APP_VERSION = 'v8.0 · 2026-08-16';
+const APP_VERSION = 'v8.1 · 2026-08-16';
 const STORAGE_KEY_PREFIX = 'orders:';
 const EXPENSE_KEY_PREFIX = 'expenses:';
 const EXPENSE_CATEGORIES = ['بنزین', 'خرید فروشگاهی', 'سایر'];
@@ -2829,11 +2829,14 @@ function openDeliveryPayment(orderId){
   root.innerHTML = `
   <div class="overlay">
     <div class="sheet">
-      <div class="sheet-head">
-        <h2>ثبت پرداخت — ${escapeHtml(o.name || o.address || '')}</h2>
+      <div class="sheet-head" style="align-items:flex-start;">
+        <div>
+          <div style="font-size:12px;color:var(--muted);margin-bottom:2px;">ثبت پرداخت</div>
+          <h2 style="margin-bottom:2px;">${escapeHtml(o.name || o.address || 'بدون نام')}</h2>
+          <div style="font-size:17px;font-weight:700;color:var(--red);" class="mono">${o.amount ? fmt(o.amount) + ' TL' : 'مبلغ نامشخص'}</div>
+        </div>
         <button class="close-x" onclick="closeModal()">×</button>
       </div>
-      <div class="order-note" style="margin-bottom:10px;">مبلغ سفارش طبق فیش: <b class="mono">${o.amount ? fmt(o.amount) + ' TL' : 'نامشخص'}</b></div>
       <div id="paymentSectionsWrap"></div>
       <div class="save-bar">
         <button class="cancel" onclick="closeModal()">انصراف</button>
@@ -3125,11 +3128,11 @@ function renderPaymentSections(){
 
   <div class="order" style="background:var(--card);color:var(--text);border:1px solid var(--line);">
     <div class="order-body">
-      <div class="order-num">کارت (پوز)</div>
+      <div class="order-num">کارت</div>
       ${d.cards.map((c,i) => `
         <div style="${i>0?'border-top:1px dashed var(--line);margin-top:10px;padding-top:10px;':''}">
           ${d.cards.length > 1 ? `<div style="text-align:left;"><button class="danger" style="padding:2px 10px;" onclick="removeCardEntry(${i})">حذف این کارت</button></div>` : ''}
-          <label>مبلغ کارت ${d.cards.length > 1 ? (i+1) : ''} (لیر)</label>
+          <label>${d.cards.length > 1 ? ('مبلغ کارت ' + (i+1) + ' (لیر)') : 'مبلغ (لیر)'}</label>
           <input type="text" inputmode="numeric" class="card-amount" data-idx="${i}" value="${c.amountTL!=null?c.amountTL:''}">
           ${photoBlockHtml('card_'+i, c, getGeminiKey() ? 'عکس فیش پوز (خودکار خونده می‌شه)' : 'عکس فیش پوز')}
         </div>
@@ -3143,7 +3146,7 @@ function renderPaymentSections(){
   <div class="order" style="background:var(--card);color:var(--text);border:1px solid var(--line);">
     <div class="order-body">
       <div class="order-num">نقد</div>
-      <label>مبلغ نقدی (لیر)</label>
+      <label>مبلغ (لیر)</label>
       <input type="text" inputmode="numeric" id="pay_cash_tl" value="${d.cashTL!=null?d.cashTL:''}">
 
       <div style="border-top:1px dashed var(--line);margin-top:10px;padding-top:10px;">
@@ -3181,11 +3184,11 @@ function renderPaymentSections(){
   <div class="order" style="background:var(--card);color:var(--text);border:1px solid var(--line);">
     <div class="order-body">
       <div class="order-num">واریز به حساب</div>
-      <label>مبلغ واریزی (لیر)</label>
+      <label>مبلغ (لیر)</label>
       <input type="text" inputmode="numeric" id="pay_transfer_tl" value="${d.transfer.amountTL!=null?d.transfer.amountTL:''}">
+      ${photoBlockHtml('transfer', d.transfer, 'عکس فیش واریز (اختیاری)')}
       <label>یادداشت (اختیاری)</label>
       <textarea id="pay_transfer_note">${escapeHtml(d.transfer.note||'')}</textarea>
-      ${photoBlockHtml('transfer', d.transfer, 'عکس فیش واریز (اختیاری)')}
     </div>
   </div>
 
