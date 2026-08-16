@@ -207,7 +207,7 @@ textarea{min-height:64px;resize:vertical;}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script>
-const APP_VERSION = 'v8.9 · 2026-08-16';
+const APP_VERSION = 'v9.0 · 2026-08-16';
 const STORAGE_KEY_PREFIX = 'orders:';
 const EXPENSE_KEY_PREFIX = 'expenses:';
 const EXPENSE_CATEGORIES = ['بنزین', 'خرید فروشگاهی', 'سایر'];
@@ -1821,20 +1821,29 @@ function deliveredOrderCard(o){
   return `
   <div class="order" style="opacity:.85;">
     <div class="order-body">
-      <div class="order-top">
-        <div style="flex:1;">
-          <div class="order-name">${escapeHtml(o.name || 'بدون نام')}</div>
-          <div class="order-amt">${fmt(o.amount || 0)} TL</div>
-          <div class="order-num">${o.time || ''}${o.orderNo ? ' · فیش #' + escapeHtml(o.orderNo) : ''}</div>
-          ${o.deliveryRefNo ? '<div class="order-num" style="color:var(--amber);">🔖 ' + escapeHtml(o.deliveryRefNo) + '</div>' : ''}
-        </div>
+      <div class="order-top" style="justify-content:space-between;align-items:baseline;">
+        <div class="order-num mono" dir="ltr" style="text-align:right;white-space:nowrap;">${o.deliveryRefNo ? '#' + escapeHtml(o.deliveryRefNo.split('-').pop()) : ''}</div>
+        <div class="order-name">${escapeHtml(o.name || 'بدون نام')}</div>
       </div>
-      <div class="order-addr">${escapeHtml(o.address || '')}</div>
-      <div class="order-meta">${paymentBadge(o)}<span class="badge src">${escapeHtml(o.source || '')}</span>${o.deliveryDurationMin != null ? '<span class="badge transfer">⏱ ' + o.deliveryDurationMin + ' دقیقه</span>' : ''}</div>
+      <div class="order-amt">${fmt(o.amount || 0)} TL</div>
+      ${o.orderNo || o.time ? `<div class="order-num mono" dir="ltr" style="text-align:left;">${o.orderNo ? '#' + escapeHtml(o.orderNo) : ''}${o.orderNo && o.time ? ' · ' : ''}${o.time || ''}</div>` : ''}
+
+      <div class="order-addr" dir="ltr" style="text-align:left;">📍 ${escapeHtml(o.address || 'آدرس ثبت نشده')}</div>
+
+      ${o.phone ? `
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:6px;">
+        <span class="mono" dir="ltr">${escapeHtml(o.phone)}</span>
+        <div style="display:flex;gap:6px;">
+          <button onclick="callOrderCustomer('${o.id}')" style="background:#eae4d2;border:1px solid #d8d0ba;border-radius:8px;padding:5px 12px;font-size:14px;">📞</button>
+          <button onclick="whatsappOrderCustomer('${o.id}')" style="background:#eae4d2;border:1px solid #d8d0ba;border-radius:8px;padding:5px 12px;font-size:14px;">💬</button>
+        </div>
+      </div>` : ''}
+
+      <div class="order-meta" style="justify-content:flex-start;">${paymentBadge(o)}<span class="badge src">${escapeHtml(o.source || '')}</span>${o.deliveryDurationMin != null ? '<span class="badge transfer">⏱ ' + o.deliveryDurationMin + ' دقیقه</span>' : ''}</div>
       <div class="order-actions">
         <button onclick="editOrder('${o.id}')"><span class="ico">✏️</span>ویرایش سفارش</button>
         <button onclick="openDeliveryPayment('${o.id}')"><span class="ico">💳</span>اصلاح پرداخت</button>
-        <button class="danger" onclick="deleteOrder('${o.id}')"><span class="ico">🗑</span>حذف</button>
+        <button class="danger" onclick="restoreOrderToQueue('${o.id}')"><span class="ico">↩️</span>برگردون به صف</button>
       </div>
       ${(receiptPhotoButtonHtml(o) || paymentPhotosButtonHtml(o)) ? `<div class="order-actions">${receiptPhotoButtonHtml(o)}${paymentPhotosButtonHtml(o)}</div>` : ''}
     </div>
@@ -1948,6 +1957,27 @@ async function deleteOrder(id){
   toast('سفارش حذف شد');
 }
 
+async function restoreOrderToQueue(id){
+  const idx = currentOrders.findIndex(x => x.id === id);
+  if(idx === -1) return;
+  currentOrders[idx] = {
+    ...currentOrders[idx],
+    status: 'pending',
+    payments: null,
+    payment: null,
+    paymentMismatch: null,
+    changeGiven: null,
+    deliveredAt: null,
+    deliveredAtTs: null,
+    deliveryDurationMin: null,
+    cancelledAt: null,
+    cancelledAtTs: null
+  };
+  await saveOrders();
+  refreshAfterOrderChange();
+  toast('سفارش به صف برگشت');
+}
+
 function autoSaveAddressToLocations(name, address, mapLink){
   if(!(address || '').trim()) return;
   const list = getSavedLocations();
@@ -2002,11 +2032,24 @@ function showCancelledList(){
         cancelled.map(o => `
         <div class="order">
           <div class="order-body">
-            <div class="order-name">${escapeHtml(o.name || 'بدون نام')}</div>
-            <div class="order-addr">${escapeHtml(o.address || '')}</div>
+            <div class="order-top" style="justify-content:space-between;align-items:baseline;">
+              <div class="order-num mono" dir="ltr" style="text-align:right;white-space:nowrap;">${o.deliveryRefNo ? '#' + escapeHtml(o.deliveryRefNo.split('-').pop()) : ''}</div>
+              <div class="order-name">${escapeHtml(o.name || 'بدون نام')}</div>
+            </div>
+            <div class="order-amt">${fmt(o.amount || 0)} TL</div>
+            ${o.orderNo || o.time ? `<div class="order-num mono" dir="ltr" style="text-align:left;">${o.orderNo ? '#' + escapeHtml(o.orderNo) : ''}${o.orderNo && o.time ? ' · ' : ''}${o.time || ''}</div>` : ''}
+            <div class="order-addr" dir="ltr" style="text-align:left;">📍 ${escapeHtml(o.address || '')}</div>
+            ${o.phone ? `
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-top:6px;">
+              <span class="mono" dir="ltr">${escapeHtml(o.phone)}</span>
+              <div style="display:flex;gap:6px;">
+                <button onclick="callOrderCustomer('${o.id}')" style="background:#eae4d2;border:1px solid #d8d0ba;border-radius:8px;padding:5px 12px;font-size:14px;">📞</button>
+                <button onclick="whatsappOrderCustomer('${o.id}')" style="background:#eae4d2;border:1px solid #d8d0ba;border-radius:8px;padding:5px 12px;font-size:14px;">💬</button>
+              </div>
+            </div>` : ''}
             <div class="order-note">فیش: ${fmt(o.amount)} TL (توی محاسبات حساب نمی‌شه) — کنسل‌شده ساعت ${escapeHtml(o.cancelledAt || '')}</div>
             <div class="order-actions">
-              <button class="danger" onclick="deleteOrder('${o.id}')"><span class="ico">🗑</span>حذف کامل</button>
+              <button class="danger" onclick="restoreOrderToQueue('${o.id}')"><span class="ico">↩️</span>برگردون به صف</button>
             </div>
           </div>
         </div>`).join('')}
@@ -2433,9 +2476,8 @@ function normalizePhoneForDialing(phone){
 function callOrderCustomer(id){
   const o = currentOrders.find(x => x.id === id);
   if(!o) return;
-  const digits = normalizePhoneForDialing(o.phone);
-  if(!digits){ toast('شماره تلفنی برای این سفارش ثبت نشده'); return; }
-  window.location.href = 'tel:+' + digits;
+  if(!o.phone || !o.phone.trim()){ toast('شماره تلفنی برای این سفارش ثبت نشده'); return; }
+  window.location.href = 'tel:' + o.phone.trim();
 }
 
 function whatsappOrderCustomer(id){
