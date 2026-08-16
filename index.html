@@ -207,7 +207,7 @@ textarea{min-height:64px;resize:vertical;}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script>
-const APP_VERSION = 'v9.0 · 2026-08-16';
+const APP_VERSION = 'v9.2 · 2026-08-16';
 const STORAGE_KEY_PREFIX = 'orders:';
 const EXPENSE_KEY_PREFIX = 'expenses:';
 const EXPENSE_CATEGORIES = ['بنزین', 'خرید فروشگاهی', 'سایر'];
@@ -379,7 +379,6 @@ let capturedImageMedia = null;
 let capturedQrLink = null;
 let capturedReceiptTime = null;
 let capturedPaidOnlineHint = false;
-let orderAutoSaved = false;
 let capturedPhotoHash = null;
 
 let payingOrderId = null;
@@ -1498,7 +1497,7 @@ function skipQrScanner(){
   if(cb) cb();
 }
 
-function toast(msg){
+function toast(msg, longDuration){
   const root = document.getElementById('toastRoot');
   const el = document.createElement('div');
   el.className = 'toast';
@@ -1506,7 +1505,7 @@ function toast(msg){
   const existingCount = root.querySelectorAll('.toast').length;
   el.style.bottom = (100 + existingCount * 46) + 'px';
   root.appendChild(el);
-  setTimeout(()=>el.remove(), 2200);
+  setTimeout(()=>el.remove(), longDuration ? 6000 : 2200);
 }
 
 async function loadOrders(){
@@ -2143,7 +2142,6 @@ function openOrderModal(existing){
   capturedQrLink = existing && existing.mapLink ? existing.mapLink : (draft ? draft.mapLink : null);
   capturedReceiptTime = null;
   capturedPaidOnlineHint = existing ? !!existing.paidOnlineHint : false;
-  orderAutoSaved = false;
   capturedPhotoHash = null;
   const o = existing || draft || { name:'', address:'', phone:'', amount:'', source:'', notes:'', orderNo:'', items:'' };
 
@@ -2206,12 +2204,10 @@ function openOrderModal(existing){
       <textarea id="f_notes" oninput="scheduleDraftSave()">${escapeHtml(o.notes||'')}</textarea>
 
       <div id="dupWarning" class="dup-warning" style="display:none;"></div>
-      <div id="autoSaveStatus" class="order-note" style="color:var(--teal);"></div>
 
       <div class="save-bar">
         <button class="cancel" onclick="cancelOrderModal()">انصراف</button>
-        <button class="save" id="orderSaveBtn" onclick="saveOrderForm()" ${(orderAutoSaved || (!o.name && !o.address && !capturedImageBase64 && !capturedQrLink)) ? 'disabled' : ''} style="${orderAutoSaved ? 'display:none;' : ''}">ذخیره سفارش</button>
-        <button class="save" id="orderConfirmBtn" onclick="confirmAutoSavedOrder()" ${orderAutoSaved ? '' : 'disabled'} style="${orderAutoSaved ? '' : 'display:none;'}">✓ تایید</button>
+        <button class="save" id="orderSaveBtn" onclick="saveOrderForm()" ${(!o.name && !o.address && !capturedImageBase64 && !capturedQrLink) ? 'disabled' : ''}>ذخیره سفارش</button>
       </div>
     </div>
   </div>`;
@@ -2321,7 +2317,6 @@ async function loadPhotoFromBlob(blob){
   capturedQrLink = null;
   capturedReceiptTime = null;
   capturedPaidOnlineHint = false;
-  orderAutoSaved = false;
   const reader = new FileReader();
   reader.onload = async () => {
     const originalDataUrl = reader.result;
@@ -2616,10 +2611,11 @@ async function runGeminiExtract(){
       data.candidates[0].content.parts[0].text : '';
     const parsed = JSON.parse(rawText);
     const ok = applyExtractedFields(parsed);
-    statusEl.textContent = ok ? 'خونده شد (Gemini، رایگان) — خودکار ثبت شد، بررسی کن.' : '⚠ این عکس فیش سفارش به نظر نمی‌رسه — عکس دیگه‌ای امتحان کن یا دستی وارد کن.';
+    statusEl.textContent = ok ? 'خونده شد (Gemini، رایگان) — بررسی کن.' : '⚠ این عکس فیش سفارش به نظر نمی‌رسه — عکس دیگه‌ای امتحان کن یا دستی وارد کن.';
     if(ok){
-      if(findDuplicateByOrderIdentity()) showAutoSaveDuplicateConfirm();
-      else await saveOrderForm(true, true);
+      showReadConfirmDialog();
+    } else {
+      updateSaveButtonState();
     }
   }catch(e){
     statusEl.textContent = '⚠ خواندن جزئیات سفارش با خطا مواجه شد (اینترنت رو چک کن) — دکمه‌ی «تلاش دوباره» رو بزن یا دستی وارد کن. توجه: اگه لینک نقشه بالا سبز شده، اون جدا و درست ثبت شده.';
@@ -2687,10 +2683,11 @@ async function runAiExtract(){
       const stats = addUsage(data.usage.input_tokens, data.usage.output_tokens);
       usageNote = ' (مصرف تا الان: $' + stats.costUSD.toFixed(3) + ')';
     }
-    statusEl.textContent = ok ? ('خونده شد — خودکار ثبت شد، بررسی کن.' + usageNote) : '⚠ این عکس فیش سفارش به نظر نمی‌رسه — عکس دیگه‌ای امتحان کن یا دستی وارد کن.';
+    statusEl.textContent = ok ? ('خونده شد — بررسی کن.' + usageNote) : '⚠ این عکس فیش سفارش به نظر نمی‌رسه — عکس دیگه‌ای امتحان کن یا دستی وارد کن.';
     if(ok){
-      if(findDuplicateByOrderIdentity()) showAutoSaveDuplicateConfirm();
-      else await saveOrderForm(true, true);
+      showReadConfirmDialog();
+    } else {
+      updateSaveButtonState();
     }
   }catch(e){
     statusEl.textContent = '⚠ خواندن جزئیات سفارش با خطا مواجه شد (اینترنت رو چک کن) — دکمه‌ی «تلاش دوباره» رو بزن یا دستی وارد کن. توجه: اگه لینک نقشه بالا سبز شده، اون جدا و درست ثبت شده.';
@@ -2717,82 +2714,16 @@ function closeDuplicateConfirm(){
   if(overlays.length > 1) overlays[overlays.length-1].remove();
 }
 
-function findDuplicateByOrderIdentity(){
-  const orderNo = ((document.getElementById('f_orderno')||{}).value || '').trim();
-  const name = ((document.getElementById('f_name')||{}).value || '').trim();
-  const identity = orderNo || name;
-  if(!identity || capturedReceiptTime == null) return null;
-  return currentOrders.find(o => {
-    if(editingId && o.id === editingId) return false;
-    const oIdentity = (o.orderNo && o.orderNo.trim()) || (o.name && o.name.trim()) || '';
-    return oIdentity === identity && o.priority === capturedReceiptTime;
-  }) || null;
-}
-
-function showAutoSaveDuplicateConfirm(){
-  const root = document.getElementById('modalRoot');
-  root.insertAdjacentHTML('beforeend', `
-  <div class="overlay" style="z-index:70;">
-    <div class="sheet" style="max-width:400px;border-radius:16px;">
-      <p style="font-size:14px;line-height:1.7;">⚠ این دقیقاً همون شماره سفارش/میز و همون ساعت یه سفارش دیگه‌ست — به نظر می‌رسه رسید تکراری اسکن شده. مطمئنی می‌خوای ثبتش کنی؟</p>
-      <div class="save-bar">
-        <button class="cancel" onclick="dismissAutoSaveDuplicate()">صرف‌نظر</button>
-        <button class="save" style="background:var(--red);color:#fff" onclick="confirmAndSaveAutoDuplicate()">تایید، ثبت کن</button>
-      </div>
-    </div>
-  </div>`);
-}
-
-async function confirmAndSaveAutoDuplicate(){
-  closeDuplicateConfirm();
-  await saveOrderForm(true, true);
-}
-
-function dismissAutoSaveDuplicate(){
-  closeDuplicateConfirm();
-  resetOrderFormForNewPhoto();
-}
-
-function resetOrderFormForNewPhoto(){
-  ['f_name','f_address','f_phone','f_amount','f_notes','f_orderno','f_items'].forEach(id => {
-    const el = document.getElementById(id);
-    if(el) el.value = '';
-  });
-  document.querySelectorAll('#srcGroup .chip').forEach(b => b.classList.remove('active'));
-  capturedImageBase64 = null;
-  capturedImageMedia = null;
-  capturedQrLink = null;
-  capturedReceiptTime = null;
-  capturedPaidOnlineHint = false;
-  orderAutoSaved = false;
-  capturedPhotoHash = null;
-  editingId = null;
-  const preview = document.getElementById('photoPreviewWrap');
-  if(preview) preview.innerHTML = '';
-  const aiStatus = document.getElementById('aiStatus');
-  if(aiStatus) aiStatus.textContent = '';
-  const qrStatus = document.getElementById('qrLinkStatus');
-  if(qrStatus){ qrStatus.textContent = ''; qrStatus.style.color = 'var(--muted)'; }
-  const autoStatus = document.getElementById('autoSaveStatus');
-  if(autoStatus) autoStatus.innerHTML = '';
-  const saveBtn = document.getElementById('orderSaveBtn');
-  if(saveBtn){ saveBtn.disabled = true; saveBtn.style.display = ''; }
-  const confirmBtn = document.getElementById('orderConfirmBtn');
-  if(confirmBtn){ confirmBtn.disabled = true; confirmBtn.style.display = 'none'; }
-  clearDraft();
-}
-
 function updateSaveButtonState(){
   const btn = document.getElementById('orderSaveBtn');
   if(!btn) return;
-  if(orderAutoSaved){ btn.disabled = true; return; }
   const name = ((document.getElementById('f_name')||{}).value || '').trim();
   const address = ((document.getElementById('f_address')||{}).value || '').trim();
   const hasMinimum = !!(name || address || capturedImageBase64 || capturedQrLink);
   btn.disabled = !hasMinimum;
 }
 
-async function saveOrderForm(forceSave, silent){
+async function saveOrderForm(forceSave){
   const name = document.getElementById('f_name').value.trim();
   const address = document.getElementById('f_address').value.trim();
   const phone = document.getElementById('f_phone').value.trim();
@@ -2808,15 +2739,15 @@ async function saveOrderForm(forceSave, silent){
   const receiptPhotoMedia = capturedImageBase64 ? capturedImageMedia : (existingForEdit ? existingForEdit.receiptPhotoMedia : null) || null;
 
   if(!address && !name && !capturedImageBase64 && !mapLink){
-    if(!silent) toast('حداقل یه چیز (نام، آدرس یا عکس رسید) لازمه');
+    toast('حداقل یه چیز (نام، آدرس یا عکس رسید) لازمه');
     return;
   }
   const incomplete = !address || !name || amount <= 0;
-  if(incomplete && !silent){
+  if(incomplete){
     toast(amount <= 0 ? 'ثبت شد (بدون مبلغ) — بعداً کاملش کن' : 'ثبت شد (ناقص) — بعداً کاملش کن');
   }
 
-  if(!forceSave && !silent){
+  if(!forceSave){
     const dup = findDuplicateOrder();
     if(dup){
       confirmDuplicateSave(dup);
@@ -2840,36 +2771,47 @@ async function saveOrderForm(forceSave, silent){
       deliveryRefNo,
       status: 'pending', priority: priorityValue, payment: null
     });
-    if(silent) editingId = newId;
   }
   await saveOrders();
   clearDraft();
-  if(silent){
-    markOrderAutoSaved();
-  } else {
-    finishOrderFormSave();
-    if(!incomplete) toast('سفارش ذخیره شد');
-  }
+  finishOrderFormSave();
+  if(!incomplete) toast('سفارش ذخیره شد');
 }
 
-function markOrderAutoSaved(){
-  orderAutoSaved = true;
-  const statusEl = document.getElementById('autoSaveStatus');
-  if(statusEl) statusEl.innerHTML = '✓ خودکار توی صف ذخیره شد — هر تغییری هم بدی، با «تایید» ثبت می‌مونه.';
-  const saveBtn = document.getElementById('orderSaveBtn');
-  if(saveBtn){
-    saveBtn.disabled = true;
-    saveBtn.style.display = 'none';
-  }
-  const confirmBtn = document.getElementById('orderConfirmBtn');
-  if(confirmBtn){
-    confirmBtn.disabled = false;
-    confirmBtn.style.display = '';
-  }
+function showReadConfirmDialog(){
+  const name = (document.getElementById('f_name') || {}).value || 'بدون نام';
+  const address = (document.getElementById('f_address') || {}).value || '';
+  const amount = (document.getElementById('f_amount') || {}).value || '';
+  const root = document.getElementById('modalRoot');
+  root.insertAdjacentHTML('beforeend', `
+  <div class="overlay" style="z-index:70;">
+    <div class="sheet" style="max-width:400px;border-radius:16px;">
+      <div class="sheet-head">
+        <h2>سفارش خونده شد</h2>
+        <button class="close-x" onclick="declineReadAndEdit()">×</button>
+      </div>
+      <p style="font-size:14px;line-height:1.8;">
+        <b>${escapeHtml(name)}</b><br>
+        ${address ? escapeHtml(address) + '<br>' : ''}
+        ${amount ? fmt(amount) + ' TL' : ''}
+      </p>
+      <p style="font-size:13px;color:var(--muted);">ثبتش کنم؟</p>
+      <div class="save-bar">
+        <button class="cancel" onclick="declineReadAndEdit()">نه، ویرایش می‌کنم</button>
+        <button class="save" onclick="confirmReadAndSave()">بله، ثبت کن</button>
+      </div>
+    </div>
+  </div>`);
 }
 
-async function confirmAutoSavedOrder(){
-  await saveOrderForm(true, false);
+async function confirmReadAndSave(){
+  closeDuplicateConfirm();
+  await saveOrderForm();
+}
+
+function declineReadAndEdit(){
+  closeDuplicateConfirm();
+  updateSaveButtonState();
 }
 
 function legacyPaymentToDraft(o){
@@ -3452,7 +3394,8 @@ async function confirmDelivery(){
     toast(mismatchNote + 'همه سفارش‌های صف تحویل داده شدن 🎉');
   }
  }catch(e){
-  toast('⚠ خطایی پیش اومد، دوباره امتحان کن');
+  toast('⚠ خطا: ' + (e && e.message ? e.message : e), true);
+  console.error('confirmDelivery error:', e);
  }
 }
 
