@@ -211,7 +211,7 @@ textarea{min-height:64px;resize:vertical;}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script>
-const APP_VERSION = 'v8.1 · 2026-08-16';
+const APP_VERSION = 'v8.3 · 2026-08-16';
 const STORAGE_KEY_PREFIX = 'orders:';
 const EXPENSE_KEY_PREFIX = 'expenses:';
 const EXPENSE_CATEGORIES = ['بنزین', 'خرید فروشگاهی', 'سایر'];
@@ -369,6 +369,7 @@ let capturedImageMedia = null;
 let capturedQrLink = null;
 let capturedReceiptTime = null;
 let capturedPaidOnlineHint = false;
+let orderAutoSaved = false;
 let capturedPhotoHash = null;
 
 let payingOrderId = null;
@@ -2068,6 +2069,7 @@ function openOrderModal(existing){
   capturedQrLink = existing && existing.mapLink ? existing.mapLink : (draft ? draft.mapLink : null);
   capturedReceiptTime = null;
   capturedPaidOnlineHint = existing ? !!existing.paidOnlineHint : false;
+  orderAutoSaved = false;
   capturedPhotoHash = null;
   const o = existing || draft || { name:'', address:'', phone:'', amount:'', source:'', notes:'', orderNo:'', items:'' };
 
@@ -2134,7 +2136,8 @@ function openOrderModal(existing){
 
       <div class="save-bar">
         <button class="cancel" onclick="cancelOrderModal()">انصراف</button>
-        <button class="save" id="orderSaveBtn" onclick="saveOrderForm()" ${(!o.name && !o.address && !capturedImageBase64 && !capturedQrLink) ? 'disabled' : ''}>ذخیره سفارش</button>
+        <button class="save" id="orderSaveBtn" onclick="saveOrderForm()" ${(orderAutoSaved || (!o.name && !o.address && !capturedImageBase64 && !capturedQrLink)) ? 'disabled' : ''} style="${orderAutoSaved ? 'display:none;' : ''}">ذخیره سفارش</button>
+        <button class="save" id="orderConfirmBtn" onclick="confirmAutoSavedOrder()" ${orderAutoSaved ? '' : 'disabled'} style="${orderAutoSaved ? '' : 'display:none;'}">✓ تایید</button>
       </div>
     </div>
   </div>`;
@@ -2243,6 +2246,7 @@ async function loadPhotoFromBlob(blob){
   capturedQrLink = null;
   capturedReceiptTime = null;
   capturedPaidOnlineHint = false;
+  orderAutoSaved = false;
   const reader = new FileReader();
   reader.onload = async () => {
     const originalDataUrl = reader.result;
@@ -2686,6 +2690,7 @@ function resetOrderFormForNewPhoto(){
   capturedQrLink = null;
   capturedReceiptTime = null;
   capturedPaidOnlineHint = false;
+  orderAutoSaved = false;
   capturedPhotoHash = null;
   editingId = null;
   const preview = document.getElementById('photoPreviewWrap');
@@ -2697,14 +2702,16 @@ function resetOrderFormForNewPhoto(){
   const autoStatus = document.getElementById('autoSaveStatus');
   if(autoStatus) autoStatus.innerHTML = '';
   const saveBtn = document.getElementById('orderSaveBtn');
-  if(saveBtn){ saveBtn.textContent = 'ذخیره سفارش'; saveBtn.onclick = saveOrderForm; saveBtn.disabled = true; }
+  if(saveBtn){ saveBtn.disabled = true; saveBtn.style.display = ''; }
+  const confirmBtn = document.getElementById('orderConfirmBtn');
+  if(confirmBtn){ confirmBtn.disabled = true; confirmBtn.style.display = 'none'; }
   clearDraft();
 }
 
 function updateSaveButtonState(){
   const btn = document.getElementById('orderSaveBtn');
   if(!btn) return;
-  if(btn.textContent.includes('تایید')) { btn.disabled = false; return; }
+  if(orderAutoSaved){ btn.disabled = true; return; }
   const name = ((document.getElementById('f_name')||{}).value || '').trim();
   const address = ((document.getElementById('f_address')||{}).value || '').trim();
   const hasMinimum = !!(name || address || capturedImageBase64 || capturedQrLink);
@@ -2770,13 +2777,18 @@ async function saveOrderForm(forceSave, silent){
 }
 
 function markOrderAutoSaved(){
+  orderAutoSaved = true;
   const statusEl = document.getElementById('autoSaveStatus');
   if(statusEl) statusEl.innerHTML = '✓ خودکار توی صف ذخیره شد — هر تغییری هم بدی، با «تایید» ثبت می‌مونه.';
   const saveBtn = document.getElementById('orderSaveBtn');
   if(saveBtn){
-    saveBtn.textContent = '✓ تایید';
-    saveBtn.onclick = confirmAutoSavedOrder;
-    saveBtn.disabled = false;
+    saveBtn.disabled = true;
+    saveBtn.style.display = 'none';
+  }
+  const confirmBtn = document.getElementById('orderConfirmBtn');
+  if(confirmBtn){
+    confirmBtn.disabled = false;
+    confirmBtn.style.display = '';
   }
 }
 
@@ -2830,10 +2842,16 @@ function openDeliveryPayment(orderId){
   <div class="overlay">
     <div class="sheet">
       <div class="sheet-head" style="align-items:flex-start;">
-        <div>
-          <div style="font-size:12px;color:var(--muted);margin-bottom:2px;">ثبت پرداخت</div>
-          <h2 style="margin-bottom:2px;">${escapeHtml(o.name || o.address || 'بدون نام')}</h2>
-          <div style="font-size:17px;font-weight:700;color:var(--red);" class="mono">${o.amount ? fmt(o.amount) + ' TL' : 'مبلغ نامشخص'}</div>
+        <div style="flex:1;">
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <span style="font-size:16px;font-weight:700;">ثبت پرداخت</span>
+            <span class="mono" style="font-size:13px;color:var(--muted);">${o.orderNo ? '#' + escapeHtml(o.orderNo) : ''}</span>
+          </div>
+          <h2 style="margin:4px 0 0;">${escapeHtml(o.name || o.address || 'بدون نام')}</h2>
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-top:4px;">
+            <span class="mono" style="font-size:17px;font-weight:700;color:var(--red);">${o.amount ? fmt(o.amount) + ' TL' : 'مبلغ نامشخص'}</span>
+            <span class="mono" id="paymentBalanceIndicator" style="font-size:15px;font-weight:700;"></span>
+          </div>
         </div>
         <button class="close-x" onclick="closeModal()">×</button>
       </div>
@@ -2984,6 +3002,42 @@ function syncPaymentDraftFromDom(){
   if(changeEl) d.changeGiven = changeEl.value;
 }
 
+function updatePaymentBalanceIndicator(){
+  const el = document.getElementById('paymentBalanceIndicator');
+  if(!el) return;
+  const o = currentOrders.find(x => x.id === payingOrderId);
+  if(!o) return;
+
+  let tlSum = 0;
+  document.querySelectorAll('.card-amount').forEach(inp => {
+    tlSum += Number(String(inp.value||'').replace(/[^0-9.]/g,'')) || 0;
+  });
+  const cashEl = document.getElementById('pay_cash_tl');
+  if(cashEl) tlSum += Number(String(cashEl.value||'').replace(/[^0-9.]/g,'')) || 0;
+  const transferEl = document.getElementById('pay_transfer_tl');
+  if(transferEl) tlSum += Number(String(transferEl.value||'').replace(/[^0-9.]/g,'')) || 0;
+
+  const forexAmounts = document.querySelectorAll('.forex-amount');
+  const forexRates = document.querySelectorAll('.forex-rate');
+  forexAmounts.forEach((inp, i) => {
+    const amt = Number(String(inp.value||'').replace(/[^0-9.]/g,'')) || 0;
+    const rate = forexRates[i] ? (Number(String(forexRates[i].value||'').replace(/[^0-9.]/g,'')) || 0) : 0;
+    tlSum += Math.round(amt * rate);
+  });
+
+  const changeEl = document.getElementById('pay_change_given');
+  const changeAmt = changeEl ? (Number(String(changeEl.value||'').replace(/[^0-9.]/g,'')) || 0) : 0;
+  tlSum -= changeAmt;
+
+  const diff = Math.round(tlSum - (Number(o.amount) || 0));
+  let color, text;
+  if(diff < 0){ color = 'var(--red)'; text = fmt(diff) + ' TL'; }
+  else if(diff === 0){ color = 'var(--text)'; text = '0 TL'; }
+  else { color = 'var(--teal)'; text = '+' + fmt(diff) + ' TL'; }
+  el.style.color = color;
+  el.textContent = 'مانده: ' + text;
+}
+
 function calcCashChange(){
   const o = currentOrders.find(x => x.id === payingOrderId);
   const receiptAmount = o ? (Number(o.amount) || 0) : 0;
@@ -3112,13 +3166,12 @@ function renderPaymentSections(){
 
   html += `
   <div class="order" style="background:var(--card);color:var(--text);border:1px solid var(--line);">
-    <div class="order-body">
-      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-top:0;">
+    <div class="order-body" style="padding:10px 12px;">
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-top:0;font-size:15px;font-weight:600;">
         <input type="checkbox" id="pay_online_used" ${d.online.used ? 'checked' : ''} onchange="togglePayOnline()" style="width:18px;height:18px;">
         <span>پرداخت آنلاین</span>
       </label>
       ${d.online.used ? `
-        <div class="order-note" style="color:var(--teal);">✓ اصل سفارش قبلاً پرداخت شده. اگه چیز اضافه‌ای (مثلاً یه قلم جدید) موقع تحویل گرفتی، بخش‌های نقد/کارت/واریز پایین‌تر رو هم پر کن — با هم مشکلی ندارن.</div>
         <label>یادداشت (اختیاری)</label>
         <textarea id="pay_online_note">${escapeHtml(d.online.note||'')}</textarea>
         ${photoBlockHtml('online', d.online, 'عکس فیش/تاییدیه (اختیاری)')}
@@ -3128,12 +3181,12 @@ function renderPaymentSections(){
 
   <div class="order" style="background:var(--card);color:var(--text);border:1px solid var(--line);">
     <div class="order-body">
-      <div class="order-num">کارت</div>
+      <div class="order-num" style="font-size:15px;font-weight:700;color:var(--text);">کارت</div>
       ${d.cards.map((c,i) => `
         <div style="${i>0?'border-top:1px dashed var(--line);margin-top:10px;padding-top:10px;':''}">
           ${d.cards.length > 1 ? `<div style="text-align:left;"><button class="danger" style="padding:2px 10px;" onclick="removeCardEntry(${i})">حذف این کارت</button></div>` : ''}
-          <label>${d.cards.length > 1 ? ('مبلغ کارت ' + (i+1) + ' (لیر)') : 'مبلغ (لیر)'}</label>
-          <input type="text" inputmode="numeric" class="card-amount" data-idx="${i}" value="${c.amountTL!=null?c.amountTL:''}">
+          <label>${d.cards.length > 1 ? ('مبلغ کارت ' + (i+1)) : 'مبلغ'}</label>
+          <input type="text" inputmode="numeric" class="card-amount" data-idx="${i}" value="${c.amountTL!=null?c.amountTL:''}" oninput="updatePaymentBalanceIndicator()">
           ${photoBlockHtml('card_'+i, c, getGeminiKey() ? 'عکس فیش پوز (خودکار خونده می‌شه)' : 'عکس فیش پوز')}
         </div>
       `).join('')}
@@ -3145,9 +3198,9 @@ function renderPaymentSections(){
 
   <div class="order" style="background:var(--card);color:var(--text);border:1px solid var(--line);">
     <div class="order-body">
-      <div class="order-num">نقد</div>
-      <label>مبلغ (لیر)</label>
-      <input type="text" inputmode="numeric" id="pay_cash_tl" value="${d.cashTL!=null?d.cashTL:''}">
+      <div class="order-num" style="font-size:15px;font-weight:700;color:var(--text);">نقد</div>
+      <label>مبلغ</label>
+      <input type="text" inputmode="numeric" id="pay_cash_tl" value="${d.cashTL!=null?d.cashTL:''}" oninput="updatePaymentBalanceIndicator()">
 
       <div style="border-top:1px dashed var(--line);margin-top:10px;padding-top:10px;">
         <label>مبلغی که مشتری داد (برای محاسبه‌ی مانده)</label>
@@ -3163,10 +3216,10 @@ function renderPaymentSections(){
             ${CURRENCIES.map(c => `<option value="${c.code}" ${f.currency===c.code?'selected':''}>${c.label}</option>`).join('')}
           </select>
           <label>مبلغ دریافتی (به همون ارز)</label>
-          <input type="text" inputmode="decimal" class="forex-amount" data-idx="${i}" value="${f.amount!=null?f.amount:''}">
+          <input type="text" inputmode="decimal" class="forex-amount" data-idx="${i}" value="${f.amount!=null?f.amount:''}" oninput="updatePaymentBalanceIndicator()">
           <label>نرخ تبدیل به لیر (۱ ${escapeHtml(f.currency||'')} = ؟ TL)</label>
           <div style="display:flex;gap:8px;">
-            <input type="text" inputmode="decimal" class="forex-rate" data-idx="${i}" value="${f.rate!=null?f.rate:''}" style="flex:1;">
+            <input type="text" inputmode="decimal" class="forex-rate" data-idx="${i}" value="${f.rate!=null?f.rate:''}" style="flex:1;" oninput="updatePaymentBalanceIndicator()">
             <button type="button" onclick="fetchAndApplyRate(${i})" style="background:var(--card2);border:1px solid var(--line);color:var(--text);border-radius:8px;padding:0 12px;white-space:nowrap;">🔄 نرخ روز</button>
           </div>
           <div class="order-note" id="forex_status_${i}">${f.rate ? ('معادل تقریبی: ' + fmt(Math.round((Number(f.amount)||0) * (Number(f.rate)||0))) + ' TL') : 'نرخ رو خودکار بگیر یا دستی بزن'}</div>
@@ -3177,28 +3230,28 @@ function renderPaymentSections(){
       </div>
 
       <label style="margin-top:10px;">مبلغی که بابت باقی پس دادی</label>
-      <input type="text" inputmode="numeric" id="pay_change_given" value="${d.changeGiven!=null?d.changeGiven:''}">
+      <input type="text" inputmode="numeric" id="pay_change_given" value="${d.changeGiven!=null?d.changeGiven:''}" oninput="updatePaymentBalanceIndicator()">
     </div>
   </div>
 
   <div class="order" style="background:var(--card);color:var(--text);border:1px solid var(--line);">
     <div class="order-body">
-      <div class="order-num">واریز به حساب</div>
-      <label>مبلغ (لیر)</label>
-      <input type="text" inputmode="numeric" id="pay_transfer_tl" value="${d.transfer.amountTL!=null?d.transfer.amountTL:''}">
+      <div class="order-num" style="font-size:15px;font-weight:700;color:var(--text);">واریز به حساب</div>
+      <label>مبلغ</label>
+      <input type="text" inputmode="numeric" id="pay_transfer_tl" value="${d.transfer.amountTL!=null?d.transfer.amountTL:''}" oninput="updatePaymentBalanceIndicator()">
       ${photoBlockHtml('transfer', d.transfer, 'عکس فیش واریز (اختیاری)')}
       <label>یادداشت (اختیاری)</label>
       <textarea id="pay_transfer_note">${escapeHtml(d.transfer.note||'')}</textarea>
     </div>
   </div>
-
-  <div class="order-note" style="margin-top:8px;">اگه بیشتر از مبلغ فیش دریافت کردی، خودکار به‌عنوان تیپ (سبز) حساب می‌شه؛ اگه کمتر بود، به‌عنوان کسری (قرمز) نشون داده می‌شه.</div>
   `;
 
   wrap.innerHTML = html;
+  updatePaymentBalanceIndicator();
 }
 
 async function confirmDelivery(){
+ try{
   syncPaymentDraftFromDom();
   const o = currentOrders.find(x => x.id === payingOrderId);
   if(!o) return;
@@ -3298,8 +3351,7 @@ async function confirmDelivery(){
     deliveryDurationMin: startedAt ? Math.max(0, Math.round((Date.now() - startedAt) / 60000)) : null
   };
   await saveOrders();
-  closeModal();
-  render();
+  refreshAfterOrderChange();
 
   const nextPending = currentOrders.filter(x => x.status !== 'delivered').sort((a,b) => (a.priority||0)-(b.priority||0));
   let mismatchNote = '';
@@ -3312,6 +3364,9 @@ async function confirmDelivery(){
   } else {
     toast(mismatchNote + 'همه سفارش‌های صف تحویل داده شدن 🎉');
   }
+ }catch(e){
+  toast('⚠ خطایی پیش اومد، دوباره امتحان کن');
+ }
 }
 
 function showQueueList(){
