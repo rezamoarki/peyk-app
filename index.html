@@ -207,7 +207,7 @@ textarea{min-height:64px;resize:vertical;}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script>
-const APP_VERSION = 'v9.5 · 2026-08-16';
+const APP_VERSION = 'v9.6 · 2026-08-16';
 const STORAGE_KEY_PREFIX = 'orders:';
 const EXPENSE_KEY_PREFIX = 'expenses:';
 const EXPENSE_CATEGORIES = ['بنزین', 'خرید فروشگاهی', 'سایر'];
@@ -1791,22 +1791,29 @@ function queueOrderCard(o, idx, total){
   return `
   <div class="order">
     <div class="order-body">
-      <div class="order-top">
-        <div style="flex:1;">
-          <div class="order-name">${escapeHtml(o.name || 'بدون نام')}</div>
-          <div class="order-amt">${fmt(o.amount || 0)} TL</div>
-          <div class="order-num">${o.time || ''}${o.orderNo ? ' · فیش #' + escapeHtml(o.orderNo) : ''}</div>
-          ${o.deliveryRefNo ? '<div class="order-num" style="color:var(--amber);">🔖 ' + escapeHtml(o.deliveryRefNo) + '</div>' : ''}
-        </div>
+      <div class="order-top" style="justify-content:space-between;align-items:baseline;">
+        <div class="order-num mono" dir="ltr" style="text-align:right;white-space:nowrap;">${o.deliveryRefNo ? '#' + escapeHtml(o.deliveryRefNo.split('-').pop()) : ''}</div>
+        <div class="order-name">${escapeHtml(o.name || 'بدون نام')}</div>
       </div>
-      <div class="order-addr">${escapeHtml(o.address || 'آدرس ثبت نشده')}</div>
-      ${o.incomplete ? '<span class="badge pending">⚠ ناقص، کاملش کن</span>' : ''}
+      <div class="order-amt">${fmt(o.amount || 0)} TL</div>
+      ${o.orderNo || o.time ? `<div class="order-num mono" dir="ltr" style="text-align:left;">${o.orderNo ? '#' + escapeHtml(o.orderNo) : ''}${o.orderNo && o.time ? ' · ' : ''}${o.time || ''}</div>` : ''}
+
+      <div class="order-addr" dir="ltr" style="text-align:left;">📍 ${escapeHtml(o.address || 'آدرس ثبت نشده')}${o.mapLink ? ' <span style="color:var(--teal);" title="لینک نقشه‌ی دقیق موجوده">✓</span>' : ''}</div>
+
+      ${o.phone ? `
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:6px;">
+        <span class="mono" dir="ltr">${escapeHtml(o.phone)}</span>
+        <div style="display:flex;gap:6px;">
+          <button onclick="callOrderCustomer('${o.id}')" style="background:#eae4d2;border:1px solid #d8d0ba;border-radius:8px;padding:5px 12px;font-size:14px;">📞</button>
+          <button onclick="whatsappOrderCustomer('${o.id}')" style="background:#eae4d2;border:1px solid #d8d0ba;border-radius:8px;padding:5px 12px;font-size:14px;">💬</button>
+        </div>
+      </div>` : ''}
+
+      <div class="order-meta" style="justify-content:flex-start;"><span class="badge src">${escapeHtml(o.source || 'نامشخص')}</span>${o.incomplete ? '<span class="badge pending">⚠ ناقص، کاملش کن</span>' : ''}</div>
       <div class="order-actions">
         ${idx>0 ? `<button onclick="moveOrderPriority('${o.id}', -1)"><span class="ico">⬆️</span>اولویت بالاتر</button>` : ''}
         ${idx<total-1 ? `<button onclick="moveOrderPriority('${o.id}', 1)"><span class="ico">⬇️</span>اولویت پایین‌تر</button>` : ''}
         <button onclick="openMap('${escapeJs(mapTarget)}')"><span class="ico">🗺️</span>نقشه</button>
-        <button onclick="callOrderCustomer('${o.id}')"><span class="ico">📞</span>تماس</button>
-        <button onclick="whatsappOrderCustomer('${o.id}')"><span class="ico">💬</span>واتساپ</button>
         ${receiptPhotoButtonHtml(o)}
         <button onclick="editOrder('${o.id}')"><span class="ico">✏️</span>ویرایش</button>
         <button class="danger" onclick="cancelOrder('${o.id}')"><span class="ico">❌</span>کنسل شد</button>
