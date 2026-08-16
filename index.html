@@ -86,7 +86,8 @@ header.top{position:sticky;top:0;z-index:20;background:var(--bg);border-bottom:1
 .badge.pending{background:var(--deficit-bg);color:var(--deficit-ink);}
 .order-amt{font-family:'JetBrains Mono',monospace;font-size:20px;font-weight:700;white-space:nowrap;}
 .order-actions{display:grid;grid-template-columns:repeat(auto-fill, minmax(78px, 1fr));gap:6px;margin-top:10px;border-top:1px dashed #cfc7ae;padding-top:8px;}
-.order-actions button{background:#eae4d2;border:1px solid #d8d0ba;font-size:12px;color:#5a5647;padding:8px 4px;border-radius:8px;font-family:inherit;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.order-actions button{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;background:#eae4d2;border:1px solid #d8d0ba;font-size:11px;color:#5a5647;padding:8px 4px;border-radius:8px;font-family:inherit;text-align:center;line-height:1.3;}
+.order-actions button .ico{font-size:17px;line-height:1;}
 .order-actions button:active{background:#e8e2d0;}
 .order-actions button.danger{color:#9c3b34;border-color:#e5c6c2;}
 .order-actions button.primary-act{background:var(--amber);color:var(--amber-ink);font-weight:700;grid-column:1 / -1;padding:12px 4px;border:none;}
@@ -210,7 +211,7 @@ textarea{min-height:64px;resize:vertical;}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script>
-const APP_VERSION = 'v7.8 · 2026-08-15';
+const APP_VERSION = 'v8.0 · 2026-08-16';
 const STORAGE_KEY_PREFIX = 'orders:';
 const EXPENSE_KEY_PREFIX = 'expenses:';
 const EXPENSE_CATEGORIES = ['بنزین', 'خرید فروشگاهی', 'سایر'];
@@ -1710,14 +1711,14 @@ function paymentBadge(o){
 
 function receiptPhotoButtonHtml(o){
   if(!o.receiptPhoto) return '';
-  return `<button onclick="openImageLightbox('data:${o.receiptPhotoMedia};base64,${o.receiptPhoto}')">📄 عکس فیش سفارش</button>`;
+  return `<button onclick="openImageLightbox('data:${o.receiptPhotoMedia};base64,${o.receiptPhoto}')"><span class="ico">📄</span>فیش سفارش</button>`;
 }
 
 function paymentPhotosButtonHtml(o){
   const photos = getOrderPayments(o).filter(p => p.posPhoto);
   if(photos.length === 0) return '';
   const first = photos[0];
-  return `<button onclick="openImageLightbox('data:${first.posMedia};base64,${first.posPhoto}')">🧾 عکس رسید پرداخت${photos.length>1 ? ' (۱ از '+photos.length+')' : ''}</button>`;
+  return `<button onclick="openImageLightbox('data:${first.posMedia};base64,${first.posPhoto}')"><span class="ico">🧾</span>فیش پرداخت${photos.length>1 ? ' ('+photos.length+')' : ''}</button>`;
 }
 
 function activeOrderCard(o){
@@ -1733,7 +1734,7 @@ function activeOrderCard(o){
         </div>
         <div class="order-amt">${fmt(o.amount || 0)}</div>
       </div>
-      <div class="order-addr">${escapeHtml(o.address || 'آدرس ثبت نشده')}${o.mapLink ? ' <span style="color:var(--teal);">(از QR کد)</span>' : ''}</div>
+      <div class="order-addr">${escapeHtml(o.address || 'آدرس ثبت نشده')}${o.mapLink ? ' <span style="color:var(--teal);" title="لینک نقشه‌ی دقیق موجوده">📍</span>' : ''}</div>
       ${o.phone ? `<div class="order-addr mono">${escapeHtml(o.phone)}</div>` : ''}
       <div class="order-meta"><span class="badge src">${escapeHtml(o.source || 'نامشخص')}</span>${o.incomplete ? '<span class="badge pending">⚠ ناقص، کاملش کن</span>' : ''}${o.startedMovingAt ? '<span class="badge cash">🚴 ' + Math.max(0, Math.round((Date.now()-o.startedMovingAt)/60000)) + ' دقیقه در راه</span>' : ''}</div>
       ${o.notes ? `<div class="order-note">یادداشت: ${escapeHtml(o.notes)}</div>` : ''}
@@ -1742,15 +1743,15 @@ function activeOrderCard(o){
       <div id="${detailsId}" style="display:none;font-size:11.5px;color:#4a463a;background:#eae4d2;border-radius:8px;padding:8px;margin-top:4px;white-space:pre-wrap;">${escapeHtml(o.items)}</div>
       ` : ''}
       <div class="order-actions">
-        <button onclick="startMovingToOrder('${o.id}', 'google')">🗺️ گوگل‌مپ</button>
-        <button onclick="startMovingToOrder('${o.id}', 'waze')">🧭 <bdi>Waze</bdi></button>
-        <button onclick="callOrderCustomer('${o.id}')">📞 تماس</button>
-        <button onclick="whatsappOrderCustomer('${o.id}')">💬 واتساپ</button>
-        <button onclick="recordArrivalLocation('${o.id}')">📍 رسیدم اینجا</button>
+        <button onclick="startMovingToOrder('${o.id}', 'google')"><span class="ico">🗺️</span>گوگل‌مپ</button>
+        <button onclick="startMovingToOrder('${o.id}', 'waze')"><span class="ico">🧭</span><bdi>Waze</bdi></button>
+        <button onclick="callOrderCustomer('${o.id}')"><span class="ico">📞</span>تماس</button>
+        <button onclick="whatsappOrderCustomer('${o.id}')"><span class="ico">💬</span>واتساپ</button>
+        <button onclick="recordArrivalLocation('${o.id}')"><span class="ico">📍</span>رسیدم اینجا</button>
         ${receiptPhotoButtonHtml(o)}
-        <button onclick="editOrder('${o.id}')">ویرایش</button>
-        <button class="danger" onclick="cancelOrder('${o.id}')">❌ کنسل شد</button>
-        <button class="danger" onclick="deleteOrder('${o.id}')">حذف</button>
+        <button onclick="editOrder('${o.id}')"><span class="ico">✏️</span>ویرایش</button>
+        <button class="danger" onclick="cancelOrder('${o.id}')"><span class="ico">❌</span>کنسل شد</button>
+        <button class="danger" onclick="deleteOrder('${o.id}')"><span class="ico">🗑</span>حذف</button>
       </div>
       <div class="order-actions">
         <button class="primary-act" onclick="openDeliveryPayment('${o.id}')">تحویل شد · ثبت پرداخت</button>
@@ -1779,13 +1780,13 @@ function queueOrderCard(o, idx, total){
         <div class="order-addr">${escapeHtml(o.address || 'آدرس ثبت نشده')}</div>
         ${o.incomplete ? '<span class="badge pending">⚠ ناقص، کاملش کن</span>' : ''}
         <div class="order-actions">
-          <button onclick="openMap('${escapeJs(mapTarget)}')">نقشه</button>
-          <button onclick="callOrderCustomer('${o.id}')">📞 تماس</button>
-          <button onclick="whatsappOrderCustomer('${o.id}')">💬 واتساپ</button>
+          <button onclick="openMap('${escapeJs(mapTarget)}')"><span class="ico">🗺️</span>نقشه</button>
+          <button onclick="callOrderCustomer('${o.id}')"><span class="ico">📞</span>تماس</button>
+          <button onclick="whatsappOrderCustomer('${o.id}')"><span class="ico">💬</span>واتساپ</button>
           ${receiptPhotoButtonHtml(o)}
-          <button onclick="editOrder('${o.id}')">ویرایش</button>
-          <button class="danger" onclick="cancelOrder('${o.id}')">❌ کنسل شد</button>
-          <button class="danger" onclick="deleteOrder('${o.id}')">حذف</button>
+          <button onclick="editOrder('${o.id}')"><span class="ico">✏️</span>ویرایش</button>
+          <button class="danger" onclick="cancelOrder('${o.id}')"><span class="ico">❌</span>کنسل شد</button>
+          <button class="danger" onclick="deleteOrder('${o.id}')"><span class="ico">🗑</span>حذف</button>
         </div>
       </div>
     </div>
@@ -1806,9 +1807,9 @@ function deliveredOrderCard(o){
       <div class="order-addr">${escapeHtml(o.address || '')}</div>
       <div class="order-meta">${paymentBadge(o)}<span class="badge src">${escapeHtml(o.source || '')}</span>${o.deliveryDurationMin != null ? '<span class="badge transfer">⏱ ' + o.deliveryDurationMin + ' دقیقه</span>' : ''}</div>
       <div class="order-actions">
-        <button onclick="editOrder('${o.id}')">ویرایش سفارش</button>
-        <button onclick="openDeliveryPayment('${o.id}')">اصلاح پرداخت</button>
-        <button class="danger" onclick="deleteOrder('${o.id}')">حذف</button>
+        <button onclick="editOrder('${o.id}')"><span class="ico">✏️</span>ویرایش سفارش</button>
+        <button onclick="openDeliveryPayment('${o.id}')"><span class="ico">💳</span>اصلاح پرداخت</button>
+        <button class="danger" onclick="deleteOrder('${o.id}')"><span class="ico">🗑</span>حذف</button>
       </div>
       ${(receiptPhotoButtonHtml(o) || paymentPhotosButtonHtml(o)) ? `<div class="order-actions">${receiptPhotoButtonHtml(o)}${paymentPhotosButtonHtml(o)}</div>` : ''}
     </div>
@@ -1973,7 +1974,7 @@ function showCancelledList(){
             <div class="order-addr">${escapeHtml(o.address || '')}</div>
             <div class="order-note">فیش: ${fmt(o.amount)} TL (توی محاسبات حساب نمی‌شه) — کنسل‌شده ساعت ${escapeHtml(o.cancelledAt || '')}</div>
             <div class="order-actions">
-              <button class="danger" onclick="deleteOrder('${o.id}')">حذف کامل</button>
+              <button class="danger" onclick="deleteOrder('${o.id}')"><span class="ico">🗑</span>حذف کامل</button>
             </div>
           </div>
         </div>`).join('')}
@@ -2083,7 +2084,7 @@ function openOrderModal(existing){
 
       <div class="photo-zone" id="photoZone">
         <div id="photoPreviewWrap"></div>
-        <div class="qr-link-status" id="qrLinkStatus" style="font-size:12px;color:${capturedQrLink ? 'var(--teal)' : 'var(--muted)'};margin-bottom:8px;">${capturedQrLink ? 'لینک نقشه ثبت شده ✓' : 'هنوز لینک نقشه از QR اسکن نشده'}</div>
+        <div class="qr-link-status" id="qrLinkStatus" style="font-size:12px;color:${capturedQrLink ? 'var(--teal)' : 'var(--muted)'};margin-bottom:8px;">${capturedQrLink ? 'لینک نقشه ثبت شده ✓' : ''}</div>
         <div class="photo-btns">
           <button onclick="document.getElementById('galleryInput').click()">از گالری</button>
           ${getApiKey() ? `<button id="aiBtn" disabled onclick="runAiExtract()">خواندن با کلود</button>` : ''}
@@ -2102,10 +2103,6 @@ function openOrderModal(existing){
       <div id="caesarMatchBanner"></div>
       <div style="display:flex;gap:8px;margin-top:6px;flex-wrap:wrap;">
         <button type="button" onclick="pickLocationForOrder()" class="mini-btn">📍 انتخاب از لوکیشن‌های ذخیره‌شده</button>
-      </div>
-      <div style="display:flex;gap:8px;margin-top:6px;flex-wrap:wrap;">
-        <button type="button" onclick="openGoogleMapsExplicit(getNavQueryForAddress(document.getElementById('f_address').value, capturedQrLink))" class="mini-btn">🗺️ گوگل‌مپ</button>
-        <button type="button" onclick="openWaze(getNavQueryForAddress(document.getElementById('f_address').value, capturedQrLink))" class="mini-btn">🧭 <bdi>Waze</bdi></button>
       </div>
       <label style="margin-top:6px;font-size:12px;">یا لینک لوکیشن واتس‌اپ رو اینجا نگه‌دار و Paste کن</label>
       <input type="text" id="order_paste_link" placeholder="اینجا لمس کن، نگه‌دار، Paste بزن..." oninput="onOrderLinkPasteInput()" style="direction:ltr;text-align:left;margin-top:4px;">
@@ -2696,7 +2693,7 @@ function resetOrderFormForNewPhoto(){
   const aiStatus = document.getElementById('aiStatus');
   if(aiStatus) aiStatus.textContent = '';
   const qrStatus = document.getElementById('qrLinkStatus');
-  if(qrStatus){ qrStatus.textContent = 'هنوز لینک نقشه از QR اسکن نشده'; qrStatus.style.color = 'var(--muted)'; }
+  if(qrStatus){ qrStatus.textContent = ''; qrStatus.style.color = 'var(--muted)'; }
   const autoStatus = document.getElementById('autoSaveStatus');
   if(autoStatus) autoStatus.innerHTML = '';
   const saveBtn = document.getElementById('orderSaveBtn');
@@ -3115,7 +3112,7 @@ function renderPaymentSections(){
     <div class="order-body">
       <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-top:0;">
         <input type="checkbox" id="pay_online_used" ${d.online.used ? 'checked' : ''} onchange="togglePayOnline()" style="width:18px;height:18px;">
-        <span>پرداخت آنلاین (قبلاً پرداخت شده)</span>
+        <span>پرداخت آنلاین</span>
       </label>
       ${d.online.used ? `
         <div class="order-note" style="color:var(--teal);">✓ اصل سفارش قبلاً پرداخت شده. اگه چیز اضافه‌ای (مثلاً یه قلم جدید) موقع تحویل گرفتی، بخش‌های نقد/کارت/واریز پایین‌تر رو هم پر کن — با هم مشکلی ندارن.</div>
@@ -3134,7 +3131,7 @@ function renderPaymentSections(){
           ${d.cards.length > 1 ? `<div style="text-align:left;"><button class="danger" style="padding:2px 10px;" onclick="removeCardEntry(${i})">حذف این کارت</button></div>` : ''}
           <label>مبلغ کارت ${d.cards.length > 1 ? (i+1) : ''} (لیر)</label>
           <input type="text" inputmode="numeric" class="card-amount" data-idx="${i}" value="${c.amountTL!=null?c.amountTL:''}">
-          ${photoBlockHtml('card_'+i, c, getGeminiKey() ? 'عکس فیش پوز (اختیاری — اگه بذاری، مبلغ خودکار خونده می‌شه)' : 'عکس فیش پوز (اختیاری)')}
+          ${photoBlockHtml('card_'+i, c, getGeminiKey() ? 'عکس فیش پوز (خودکار خونده می‌شه)' : 'عکس فیش پوز')}
         </div>
       `).join('')}
       <div class="save-bar" style="margin-top:8px;">
@@ -3150,7 +3147,7 @@ function renderPaymentSections(){
       <input type="text" inputmode="numeric" id="pay_cash_tl" value="${d.cashTL!=null?d.cashTL:''}">
 
       <div style="border-top:1px dashed var(--line);margin-top:10px;padding-top:10px;">
-        <label>مبلغی که مشتری بهت داد (اختیاری — برای محاسبه‌ی خودکار مانده)</label>
+        <label>مبلغی که مشتری داد (برای محاسبه‌ی مانده)</label>
         <input type="text" inputmode="numeric" id="cash_handed_over" oninput="calcCashChange()">
         <div class="order-note" id="cashChangeStatus"></div>
       </div>
@@ -3173,10 +3170,10 @@ function renderPaymentSections(){
         </div>
       `).join('')}
       <div class="save-bar" style="margin-top:8px;">
-        <button class="cancel" onclick="addForexEntry()">+ افزودن ارز دیگر (غیر از لیر)</button>
+        <button class="cancel" onclick="addForexEntry()">+ افزودن ارز دیگر</button>
       </div>
 
-      <label style="margin-top:10px;">مبلغی که بابت باقی به مشتری پس دادی (اختیاری — از هر روش پرداختی که بود)</label>
+      <label style="margin-top:10px;">مبلغی که بابت باقی پس دادی</label>
       <input type="text" inputmode="numeric" id="pay_change_given" value="${d.changeGiven!=null?d.changeGiven:''}">
     </div>
   </div>
@@ -3186,7 +3183,7 @@ function renderPaymentSections(){
       <div class="order-num">واریز به حساب</div>
       <label>مبلغ واریزی (لیر)</label>
       <input type="text" inputmode="numeric" id="pay_transfer_tl" value="${d.transfer.amountTL!=null?d.transfer.amountTL:''}">
-      <label>یادداشت (شماره پیگیری، اختیاری)</label>
+      <label>یادداشت (اختیاری)</label>
       <textarea id="pay_transfer_note">${escapeHtml(d.transfer.note||'')}</textarea>
       ${photoBlockHtml('transfer', d.transfer, 'عکس فیش واریز (اختیاری)')}
     </div>
