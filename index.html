@@ -207,7 +207,7 @@ textarea{min-height:64px;resize:vertical;}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script>
-const APP_VERSION = 'v8.8 · 2026-08-16';
+const APP_VERSION = 'v8.9 · 2026-08-16';
 const STORAGE_KEY_PREFIX = 'orders:';
 const EXPENSE_KEY_PREFIX = 'expenses:';
 const EXPENSE_CATEGORIES = ['بنزین', 'خرید فروشگاهی', 'سایر'];
@@ -1601,6 +1601,13 @@ function nowMinutes(){
   return d.getHours()*60 + d.getMinutes();
 }
 
+function getOrderElapsedMinutes(o){
+  if(o.priority == null) return null;
+  let elapsed = nowMinutes() - o.priority;
+  if(elapsed < 0) elapsed += 24*60;
+  return elapsed;
+}
+
 function minutesToDisplayTime(mins){
   const d = new Date();
   d.setHours(Math.floor(mins/60), mins%60, 0, 0);
@@ -1734,15 +1741,18 @@ function paymentPhotosButtonHtml(o){
 function activeOrderCard(o){
   const mapTarget = o.mapLink || o.address || '';
   const detailsId = 'det_' + o.id;
+  const elapsed = getOrderElapsedMinutes(o);
+  const elapsedColor = elapsed == null ? 'var(--muted)' : (elapsed >= 45 ? 'var(--red)' : (elapsed >= 30 ? 'var(--amber)' : 'var(--muted)'));
   return `
   <div class="order active">
     <div class="order-body">
       <div class="order-top" style="justify-content:space-between;align-items:baseline;">
+        <div class="order-num mono" dir="ltr" style="text-align:right;white-space:nowrap;">${o.deliveryRefNo ? '#' + escapeHtml(o.deliveryRefNo.split('-').pop()) : ''}</div>
         <div class="order-name">${escapeHtml(o.name || 'بدون نام')}</div>
-        <div class="order-num mono" dir="ltr" style="text-align:left;white-space:nowrap;">${o.time || ''}${o.deliveryRefNo ? ' #' + escapeHtml(o.deliveryRefNo.split('-').pop()) : ''}</div>
       </div>
       <div class="order-amt">${fmt(o.amount || 0)} TL</div>
-      ${o.orderNo ? `<div class="order-num">فیش #${escapeHtml(o.orderNo)}</div>` : ''}
+      ${o.orderNo || o.time ? `<div class="order-num mono" dir="ltr" style="text-align:left;">${o.orderNo ? '#' + escapeHtml(o.orderNo) : ''}${o.orderNo && o.time ? ' · ' : ''}${o.time || ''}</div>` : ''}
+      ${elapsed != null ? `<div class="order-note" style="color:${elapsedColor};font-weight:700;">⏱ ${elapsed} دقیقه از ثبت سفارش گذشته (یادآوری، سقف ۴۵ دقیقه)</div>` : ''}
 
       <div class="order-addr" dir="ltr" style="text-align:left;">📍 ${escapeHtml(o.address || 'آدرس ثبت نشده')}${o.mapLink ? ' <span style="color:var(--teal);" title="لینک نقشه‌ی دقیق موجوده">✓</span>' : ''}</div>
 
@@ -3887,6 +3897,13 @@ function handleIncomingShare(){
 console.log('پیک سوشین - نسخه', APP_VERSION);
 loadOrders();
 handleIncomingShare();
+
+setInterval(() => {
+  const modalOpen = (document.getElementById('modalRoot') || {}).innerHTML;
+  if(!modalOpen){
+    render();
+  }
+}, 60000);
 
 if('serviceWorker' in navigator && window.isSecureContext){
   window.addEventListener('load', () => {
