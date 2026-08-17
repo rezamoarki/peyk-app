@@ -207,7 +207,7 @@ textarea{min-height:64px;resize:vertical;}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script>
-const APP_VERSION = 'v9.8 · 2026-08-17';
+const APP_VERSION = 'v9.9 · 2026-08-17';
 const STORAGE_KEY_PREFIX = 'orders:';
 const EXPENSE_KEY_PREFIX = 'expenses:';
 const EXPENSE_CATEGORIES = ['بنزین', 'خرید فروشگاهی', 'سایر'];
@@ -251,18 +251,10 @@ function todayExpenseKey(){
   return EXPENSE_KEY_PREFIX + todayKey().replace(STORAGE_KEY_PREFIX, '');
 }
 
-async function getNextDeliveryRefNo(){
-  const dateStr = todayKey().replace(STORAGE_KEY_PREFIX, '');
-  const dayShort = new Date().toLocaleDateString('en-US', { weekday: 'short' });
-  const counterKey = 'seq:' + dateStr;
-  let current = 0;
-  try{
-    const r = await localStore.get(counterKey);
-    current = r ? (JSON.parse(r.value) || 0) : 0;
-  }catch(e){ current = 0; }
-  const next = current + 1;
-  await localStore.set(counterKey, JSON.stringify(next));
-  return dateStr + '-' + dayShort + '-' + next;
+function getDisplayOrderNumber(o){
+  const active = currentOrders.filter(x => x.status !== 'cancelled');
+  const idx = active.findIndex(x => x.id === o.id);
+  return idx > -1 ? (idx + 1) : null;
 }
 
 async function getExpensesForDay(dayKey){
@@ -1845,25 +1837,25 @@ function activeOrderCard(o){
   <div class="order active">
     <div class="order-body">
       <div class="order-top" style="justify-content:space-between;align-items:baseline;">
-        <div class="order-num mono" dir="ltr" style="text-align:right;white-space:nowrap;">${o.deliveryRefNo ? '#' + escapeHtml(o.deliveryRefNo.split('-').pop()) : ''}</div>
         <div class="order-name">${escapeHtml(o.name || 'بدون نام')}</div>
+        <div class="order-amt" style="margin:0;">${fmt(o.amount || 0)} TL</div>
+        <div class="order-num mono" dir="ltr" style="text-align:left;white-space:nowrap;">${getDisplayOrderNumber(o) != null ? '#' + getDisplayOrderNumber(o) : ''}</div>
       </div>
-      <div class="order-amt">${fmt(o.amount || 0)} TL</div>
-      ${o.orderNo || o.time ? `<div class="order-num mono" dir="ltr" style="text-align:left;">${o.orderNo ? '#' + escapeHtml(o.orderNo) : ''}${o.orderNo && o.time ? ' · ' : ''}${o.time || ''}</div>` : ''}
+      ${o.orderNo || o.time || o.source ? `<div class="order-num mono" dir="ltr" style="text-align:left;display:flex;align-items:center;gap:6px;flex-wrap:wrap;">${o.orderNo ? '#' + escapeHtml(o.orderNo) : ''}${o.orderNo && o.time ? ' · ' : ''}${o.time || ''}${o.source ? `<span class="badge src" style="direction:rtl;">${escapeHtml(o.source)}</span>` : ''}</div>` : ''}
       ${elapsed != null ? `<div class="order-note" style="color:${elapsedColor};font-weight:700;">⏱ ${elapsed} دقیقه از ثبت سفارش گذشته (یادآوری، سقف ۴۵ دقیقه)</div>` : ''}
 
       <div class="order-addr" dir="ltr" style="text-align:left;">📍 ${escapeHtml(o.address || 'آدرس ثبت نشده')}${o.mapLink ? ' <span style="color:var(--teal);" title="لینک نقشه‌ی دقیق موجوده">✓</span>' : ''}</div>
 
       ${o.phone ? `
       <div style="display:flex;justify-content:space-between;align-items:center;margin-top:6px;">
-        <span class="mono" dir="ltr">${escapeHtml(o.phone)}</span>
         <div style="display:flex;gap:6px;">
           <button onclick="callOrderCustomer('${o.id}')" style="background:#eae4d2;border:1px solid #d8d0ba;border-radius:8px;padding:5px 12px;font-size:14px;">📞</button>
           <button onclick="whatsappOrderCustomer('${o.id}')" style="background:#eae4d2;border:1px solid #d8d0ba;border-radius:8px;padding:5px 12px;font-size:14px;">💬</button>
         </div>
+        <span class="mono" dir="ltr">${escapeHtml(o.phone)}</span>
       </div>` : ''}
 
-      <div class="order-meta" style="justify-content:flex-start;"><span class="badge src">${escapeHtml(o.source || 'نامشخص')}</span>${o.incomplete ? '<span class="badge pending">⚠ ناقص، کاملش کن</span>' : ''}${o.startedMovingAt ? '<span class="badge cash">🚴 ' + Math.max(0, Math.round((Date.now()-o.startedMovingAt)/60000)) + ' دقیقه در راه</span>' : ''}</div>
+      <div class="order-meta" style="justify-content:flex-start;">${o.incomplete ? '<span class="badge pending">⚠ ناقص، کاملش کن</span>' : ''}${o.startedMovingAt ? '<span class="badge cash">🚴 ' + Math.max(0, Math.round((Date.now()-o.startedMovingAt)/60000)) + ' دقیقه در راه</span>' : ''}</div>
       ${o.notes ? `<div class="order-note">یادداشت: ${escapeHtml(o.notes)}</div>` : ''}
       ${o.items ? `
       <div class="order-note" style="cursor:pointer;text-decoration:underline;" onclick="document.getElementById('${detailsId}').style.display = document.getElementById('${detailsId}').style.display==='block' ? 'none':'block'">جزئیات کامل سفارش</div>
@@ -1891,24 +1883,24 @@ function queueOrderCard(o, idx, total){
   <div class="order">
     <div class="order-body">
       <div class="order-top" style="justify-content:space-between;align-items:baseline;">
-        <div class="order-num mono" dir="ltr" style="text-align:right;white-space:nowrap;">${o.deliveryRefNo ? '#' + escapeHtml(o.deliveryRefNo.split('-').pop()) : ''}</div>
         <div class="order-name">${escapeHtml(o.name || 'بدون نام')}</div>
+        <div class="order-amt" style="margin:0;">${fmt(o.amount || 0)} TL</div>
+        <div class="order-num mono" dir="ltr" style="text-align:left;white-space:nowrap;">${getDisplayOrderNumber(o) != null ? '#' + getDisplayOrderNumber(o) : ''}</div>
       </div>
-      <div class="order-amt">${fmt(o.amount || 0)} TL</div>
-      ${o.orderNo || o.time ? `<div class="order-num mono" dir="ltr" style="text-align:left;">${o.orderNo ? '#' + escapeHtml(o.orderNo) : ''}${o.orderNo && o.time ? ' · ' : ''}${o.time || ''}</div>` : ''}
+      ${o.orderNo || o.time || o.source ? `<div class="order-num mono" dir="ltr" style="text-align:left;display:flex;align-items:center;gap:6px;flex-wrap:wrap;">${o.orderNo ? '#' + escapeHtml(o.orderNo) : ''}${o.orderNo && o.time ? ' · ' : ''}${o.time || ''}${o.source ? `<span class="badge src" style="direction:rtl;">${escapeHtml(o.source)}</span>` : ''}</div>` : ''}
 
       <div class="order-addr" dir="ltr" style="text-align:left;">📍 ${escapeHtml(o.address || 'آدرس ثبت نشده')}${o.mapLink ? ' <span style="color:var(--teal);" title="لینک نقشه‌ی دقیق موجوده">✓</span>' : ''}</div>
 
       ${o.phone ? `
       <div style="display:flex;justify-content:space-between;align-items:center;margin-top:6px;">
-        <span class="mono" dir="ltr">${escapeHtml(o.phone)}</span>
         <div style="display:flex;gap:6px;">
           <button onclick="callOrderCustomer('${o.id}')" style="background:#eae4d2;border:1px solid #d8d0ba;border-radius:8px;padding:5px 12px;font-size:14px;">📞</button>
           <button onclick="whatsappOrderCustomer('${o.id}')" style="background:#eae4d2;border:1px solid #d8d0ba;border-radius:8px;padding:5px 12px;font-size:14px;">💬</button>
         </div>
+        <span class="mono" dir="ltr">${escapeHtml(o.phone)}</span>
       </div>` : ''}
 
-      <div class="order-meta" style="justify-content:flex-start;"><span class="badge src">${escapeHtml(o.source || 'نامشخص')}</span>${o.incomplete ? '<span class="badge pending">⚠ ناقص، کاملش کن</span>' : ''}</div>
+      <div class="order-meta" style="justify-content:flex-start;">${o.incomplete ? '<span class="badge pending">⚠ ناقص، کاملش کن</span>' : ''}</div>
       <div class="order-actions">
         ${idx>0 ? `<button onclick="moveOrderPriority('${o.id}', -1)"><span class="ico">⬆️</span>اولویت بالاتر</button>` : ''}
         ${idx<total-1 ? `<button onclick="moveOrderPriority('${o.id}', 1)"><span class="ico">⬇️</span>اولویت پایین‌تر</button>` : ''}
@@ -1927,24 +1919,24 @@ function deliveredOrderCard(o){
   <div class="order" style="opacity:.85;">
     <div class="order-body">
       <div class="order-top" style="justify-content:space-between;align-items:baseline;">
-        <div class="order-num mono" dir="ltr" style="text-align:right;white-space:nowrap;">${o.deliveryRefNo ? '#' + escapeHtml(o.deliveryRefNo.split('-').pop()) : ''}</div>
         <div class="order-name">${escapeHtml(o.name || 'بدون نام')}</div>
+        <div class="order-amt" style="margin:0;">${fmt(o.amount || 0)} TL</div>
+        <div class="order-num mono" dir="ltr" style="text-align:left;white-space:nowrap;">${getDisplayOrderNumber(o) != null ? '#' + getDisplayOrderNumber(o) : ''}</div>
       </div>
-      <div class="order-amt">${fmt(o.amount || 0)} TL</div>
-      ${o.orderNo || o.time ? `<div class="order-num mono" dir="ltr" style="text-align:left;">${o.orderNo ? '#' + escapeHtml(o.orderNo) : ''}${o.orderNo && o.time ? ' · ' : ''}${o.time || ''}</div>` : ''}
+      ${o.orderNo || o.time || o.source ? `<div class="order-num mono" dir="ltr" style="text-align:left;display:flex;align-items:center;gap:6px;flex-wrap:wrap;">${o.orderNo ? '#' + escapeHtml(o.orderNo) : ''}${o.orderNo && o.time ? ' · ' : ''}${o.time || ''}${o.source ? `<span class="badge src" style="direction:rtl;">${escapeHtml(o.source)}</span>` : ''}</div>` : ''}
 
       <div class="order-addr" dir="ltr" style="text-align:left;">📍 ${escapeHtml(o.address || 'آدرس ثبت نشده')}</div>
 
       ${o.phone ? `
       <div style="display:flex;justify-content:space-between;align-items:center;margin-top:6px;">
-        <span class="mono" dir="ltr">${escapeHtml(o.phone)}</span>
         <div style="display:flex;gap:6px;">
           <button onclick="callOrderCustomer('${o.id}')" style="background:#eae4d2;border:1px solid #d8d0ba;border-radius:8px;padding:5px 12px;font-size:14px;">📞</button>
           <button onclick="whatsappOrderCustomer('${o.id}')" style="background:#eae4d2;border:1px solid #d8d0ba;border-radius:8px;padding:5px 12px;font-size:14px;">💬</button>
         </div>
+        <span class="mono" dir="ltr">${escapeHtml(o.phone)}</span>
       </div>` : ''}
 
-      <div class="order-meta" style="justify-content:flex-start;">${paymentBadge(o)}<span class="badge src">${escapeHtml(o.source || '')}</span>${o.deliveryDurationMin != null ? '<span class="badge transfer">⏱ ' + o.deliveryDurationMin + ' دقیقه</span>' : ''}</div>
+      <div class="order-meta" style="justify-content:flex-start;">${paymentBadge(o)}${o.deliveryDurationMin != null ? '<span class="badge transfer">⏱ ' + o.deliveryDurationMin + ' دقیقه</span>' : ''}</div>
       <div class="order-actions">
         <button onclick="editOrder('${o.id}')"><span class="ico">✏️</span>ویرایش سفارش</button>
         <button onclick="openDeliveryPayment('${o.id}')"><span class="ico">💳</span>اصلاح پرداخت</button>
@@ -2139,19 +2131,18 @@ function showCancelledList(){
         <div class="order">
           <div class="order-body">
             <div class="order-top" style="justify-content:space-between;align-items:baseline;">
-              <div class="order-num mono" dir="ltr" style="text-align:right;white-space:nowrap;">${o.deliveryRefNo ? '#' + escapeHtml(o.deliveryRefNo.split('-').pop()) : ''}</div>
               <div class="order-name">${escapeHtml(o.name || 'بدون نام')}</div>
+              <div class="order-amt" style="margin:0;">${fmt(o.amount || 0)} TL</div>
             </div>
-            <div class="order-amt">${fmt(o.amount || 0)} TL</div>
-            ${o.orderNo || o.time ? `<div class="order-num mono" dir="ltr" style="text-align:left;">${o.orderNo ? '#' + escapeHtml(o.orderNo) : ''}${o.orderNo && o.time ? ' · ' : ''}${o.time || ''}</div>` : ''}
+            ${o.orderNo || o.time || o.source ? `<div class="order-num mono" dir="ltr" style="text-align:left;display:flex;align-items:center;gap:6px;flex-wrap:wrap;">${o.orderNo ? '#' + escapeHtml(o.orderNo) : ''}${o.orderNo && o.time ? ' · ' : ''}${o.time || ''}${o.source ? `<span class="badge src" style="direction:rtl;">${escapeHtml(o.source)}</span>` : ''}</div>` : ''}
             <div class="order-addr" dir="ltr" style="text-align:left;">📍 ${escapeHtml(o.address || '')}</div>
             ${o.phone ? `
             <div style="display:flex;justify-content:space-between;align-items:center;margin-top:6px;">
-              <span class="mono" dir="ltr">${escapeHtml(o.phone)}</span>
               <div style="display:flex;gap:6px;">
                 <button onclick="callOrderCustomer('${o.id}')" style="background:#eae4d2;border:1px solid #d8d0ba;border-radius:8px;padding:5px 12px;font-size:14px;">📞</button>
                 <button onclick="whatsappOrderCustomer('${o.id}')" style="background:#eae4d2;border:1px solid #d8d0ba;border-radius:8px;padding:5px 12px;font-size:14px;">💬</button>
               </div>
+              <span class="mono" dir="ltr">${escapeHtml(o.phone)}</span>
             </div>` : ''}
             <div class="order-note">فیش: ${fmt(o.amount)} TL (توی محاسبات حساب نمی‌شه) — کنسل‌شده ساعت ${escapeHtml(o.cancelledAt || '')}</div>
             <div class="order-actions">
@@ -2887,13 +2878,11 @@ async function saveOrderForm(forceSave){
     const priorityValue = capturedReceiptTime != null ? capturedReceiptTime : nowMinutes();
     const displayTime = capturedReceiptTime != null ? minutesToDisplayTime(capturedReceiptTime) : new Date().toLocaleTimeString('fa-IR', { hour:'2-digit', minute:'2-digit' });
     const newId = 'o_' + Date.now() + '_' + Math.random().toString(36).slice(2,7);
-    const deliveryRefNo = await getNextDeliveryRefNo();
     currentOrders.push({
       id: newId,
       time: displayTime,
       name, address, phone, amount, source, notes, orderNo, items, mapLink, photoHash, incomplete, receiptPhoto, receiptPhotoMedia,
       paidOnlineHint: capturedPaidOnlineHint,
-      deliveryRefNo,
       status: 'pending', priority: priorityValue, payment: null
     });
   }
