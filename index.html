@@ -207,7 +207,7 @@ textarea{min-height:64px;resize:vertical;}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script>
-const APP_VERSION = 'v9.6 · 2026-08-16';
+const APP_VERSION = 'v9.8 · 2026-08-17';
 const STORAGE_KEY_PREFIX = 'orders:';
 const EXPENSE_KEY_PREFIX = 'expenses:';
 const EXPENSE_CATEGORIES = ['بنزین', 'خرید فروشگاهی', 'سایر'];
@@ -224,8 +224,13 @@ const localStore = {
     return v !== null ? { key, value: v } : null;
   },
   async set(key, value){
-    localStorage.setItem(key, value);
-    return { key, value };
+    try{
+      localStorage.setItem(key, value);
+      return { key, value };
+    }catch(e){
+      toast('⚠ حافظه‌ی گوشی برای ذخیره پر شده! برو تنظیمات → پاکسازی عکس‌های قدیمی', true);
+      throw e;
+    }
   },
   async list(prefix){
     const keys = [];
@@ -848,7 +853,7 @@ function loadLocationPhotoFromBlob(blob){
     const originalDataUrl = reader.result;
     const wrap = document.getElementById('locPhotoPreviewWrap');
     if(wrap) wrap.innerHTML = `<img src="${originalDataUrl}" onclick="openImageLightbox(this.src)" style="cursor:zoom-in;">`;
-    const resized = await resizeImageDataUrl(originalDataUrl, 1600);
+    const resized = await resizeImageDataUrl(originalDataUrl, 1280);
     window._locFormPhotoMedia = resized.dataUrl.startsWith('data:image/jpeg') ? 'image/jpeg' : (blob.type || 'image/jpeg');
     window._locFormPhotoBase64 = resized.dataUrl.split(',')[1];
     const aiBtn = document.getElementById('locAiReadBtn');
@@ -1081,6 +1086,66 @@ function applyPickedLocation(id){
   toast('لوکیشن اعمال شد');
 }
 
+function updateStorageUsageNote(){
+  const el = document.getElementById('storageUsageNote');
+  if(!el) return;
+  let totalBytes = 0;
+  try{
+    for(let i=0;i<localStorage.length;i++){
+      const k = localStorage.key(i);
+      const v = localStorage.getItem(k) || '';
+      totalBytes += (k.length + v.length) * 2;
+    }
+  }catch(e){}
+  const mb = (totalBytes / (1024*1024)).toFixed(1);
+  el.textContent = 'در حال حاضر حدود ' + mb + ' مگابایت از حافظه‌ی مرورگر استفاده شده.';
+}
+
+function confirmCleanupOldPhotos(){
+  const root = document.getElementById('modalRoot');
+  root.insertAdjacentHTML('beforeend', `
+  <div class="overlay" style="z-index:70;">
+    <div class="sheet" style="max-width:400px;border-radius:16px;">
+      <p style="font-size:14px;line-height:1.7;">عکس‌های فیش و پرداختِ روزهای گذشته (نه امروز) حذف می‌شن تا جا باز بشه. مبلغ‌ها، اسم‌ها، آدرس‌ها و همه‌ی اطلاعات مالی دست‌نخورده می‌مونن — فقط خود عکس‌ها پاک می‌شن. مطمئنی؟</p>
+      <div class="save-bar">
+        <button class="cancel" onclick="closeDuplicateConfirm()">انصراف</button>
+        <button class="save" style="background:var(--red);color:#fff" onclick="cleanupOldPhotos()">پاکسازی کن</button>
+      </div>
+    </div>
+  </div>`);
+}
+
+async function cleanupOldPhotos(){
+  closeDuplicateConfirm();
+  const today = todayKey();
+  let cleanedDays = 0;
+  try{
+    const listRes = await localStore.list(STORAGE_KEY_PREFIX);
+    const keys = (listRes && listRes.keys) || [];
+    for(const key of keys){
+      if(key === today) continue;
+      try{
+        const r = await localStore.get(key);
+        if(!r) continue;
+        const orders = JSON.parse(r.value);
+        let changed = false;
+        orders.forEach(o => {
+          if(o.receiptPhoto){ o.receiptPhoto = null; o.receiptPhotoMedia = null; changed = true; }
+          (o.payments || []).forEach(p => {
+            if(p.posPhoto){ p.posPhoto = null; p.posMedia = null; changed = true; }
+          });
+        });
+        if(changed){
+          localStorage.setItem(key, JSON.stringify(orders));
+          cleanedDays++;
+        }
+      }catch(e){}
+    }
+  }catch(e){}
+  toast(cleanedDays > 0 ? ('عکس‌های ' + cleanedDays + ' روز پاک شد ✓') : 'چیزی برای پاکسازی پیدا نشد');
+  updateStorageUsageNote();
+}
+
 function openSettings(){
   const root = document.getElementById('modalRoot');
   const key = getApiKey();
@@ -1105,6 +1170,15 @@ function openSettings(){
       </div>
       <div class="save-bar">
         <button class="save" onclick="saveGeminiKeyFromSettings()">ذخیره کلید Gemini</button>
+      </div>
+
+      <div class="section-label" style="margin-top:22px;"><span>حافظه‌ی ذخیره‌سازی</span></div>
+      <div class="order-note" id="storageUsageNote" style="margin-top:6px;">در حال محاسبه...</div>
+      <div class="save-bar">
+        <button class="danger" onclick="confirmCleanupOldPhotos()">🧹 پاکسازی عکس‌های قدیمی</button>
+      </div>
+      <div class="order-note" style="margin-top:6px;line-height:1.8;">
+        این کار عکس‌های فیش/پرداخت روزهای گذشته (نه امروز) رو حذف می‌کنه تا جا باز بشه — ولی خودِ سفارش‌ها و مبلغ‌ها و گزارش‌ها دست‌نخورده می‌مونن. این کار برگشت‌پذیر نیست.
       </div>
 
       <div class="section-label" style="margin-top:22px;"><span>کلید API کلود (اختیاری، دقیق‌تر ولی پولی)</span></div>
@@ -1158,6 +1232,7 @@ function openSettings(){
       toast('اپ مسیریابی پیش‌فرض ذخیره شد');
     };
   });
+  updateStorageUsageNote();
 }
 
 function saveGeminiKeyFromSettings(){
@@ -1519,7 +1594,31 @@ async function loadOrders(){
 }
 
 async function saveOrders(){
-  await localStore.set(todayKey(), JSON.stringify(currentOrders));
+  try{
+    await localStore.set(todayKey(), JSON.stringify(currentOrders));
+  }catch(e){
+    try{
+      const stripped = currentOrders.map(o => {
+        const copy = { ...o };
+        delete copy.receiptPhoto;
+        delete copy.receiptPhotoMedia;
+        if(copy.payments){
+          copy.payments = copy.payments.map(p => {
+            const pc = { ...p };
+            delete pc.posPhoto;
+            delete pc.posMedia;
+            return pc;
+          });
+        }
+        return copy;
+      });
+      await localStore.set(todayKey(), JSON.stringify(stripped));
+      toast('⚠ حافظه‌ی گوشی پره — عکس‌ها این‌بار ذخیره نشدن، ولی مبلغ/آدرس/همه‌چیز دیگه ذخیره شد. لطفاً از «تاریخچه» چندتا روز قدیمی رو حذف کن تا جا باز شه.', true);
+    }catch(e2){
+      toast('⚠ خطای جدی در ذخیره‌سازی: ' + (e2 && e2.message ? e2.message : e2), true);
+      throw e2;
+    }
+  }
 }
 
 function normalizePhone(p){
@@ -2314,7 +2413,7 @@ function resizeImageDataUrl(dataUrl, maxDim){
       canvas.height = newH;
       const ctx = canvas.getContext('2d');
       ctx.drawImage(img, 0, 0, newW, newH);
-      resolve({ dataUrl: canvas.toDataURL('image/jpeg', 0.85), width: newW, height: newH });
+      resolve({ dataUrl: canvas.toDataURL('image/jpeg', 0.75), width: newW, height: newH });
     };
     img.onerror = () => resolve({ dataUrl, width: null, height: null });
     img.src = dataUrl;
@@ -2330,7 +2429,7 @@ async function loadPhotoFromBlob(blob){
     const originalDataUrl = reader.result;
     document.getElementById('photoPreviewWrap').innerHTML = `<img src="${originalDataUrl}" onclick="openImageLightbox(this.src)" style="cursor:zoom-in;"><div id="qrStatus" style="font-size:11.5px;color:var(--muted);margin-top:-4px;margin-bottom:6px;">در حال آماده‌سازی عکس...</div>`;
 
-    const resized = await resizeImageDataUrl(originalDataUrl, 1600);
+    const resized = await resizeImageDataUrl(originalDataUrl, 1280);
     const finalDataUrl = resized.dataUrl;
     capturedImageMedia = finalDataUrl.startsWith('data:image/jpeg') ? 'image/jpeg' : (blob.type || 'image/jpeg');
     capturedImageBase64 = finalDataUrl.split(',')[1];
@@ -2939,7 +3038,7 @@ function onPaymentPhotoSelected(evt, key){
     const originalDataUrl = reader.result;
     const wrap = document.getElementById('payPhotoPreview_' + key);
     if(wrap) wrap.innerHTML = `<img src="${originalDataUrl}" onclick="openImageLightbox(this.src)" style="cursor:zoom-in;">`;
-    const resized = await resizeImageDataUrl(originalDataUrl, 1600);
+    const resized = await resizeImageDataUrl(originalDataUrl, 1280);
     if(!window._paymentPhotos) window._paymentPhotos = {};
     window._paymentPhotos[key] = {
       media: resized.dataUrl.startsWith('data:image/jpeg') ? 'image/jpeg' : (file.type || 'image/jpeg'),
@@ -3289,8 +3388,7 @@ function renderPaymentSections(){
   <div class="order" style="background:var(--card);color:var(--text);border:1px solid var(--line);">
     <div class="order-body">
       <div class="order-num" style="font-size:15px;font-weight:700;color:var(--text);">واریز به حساب</div>
-      <label>مبلغ</label>
-      <input type="text" inputmode="numeric" id="pay_transfer_tl" value="${d.transfer.amountTL!=null?d.transfer.amountTL:''}" oninput="updatePaymentBalanceIndicator()">
+      <input type="text" inputmode="numeric" id="pay_transfer_tl" value="${d.transfer.amountTL!=null?d.transfer.amountTL:''}" oninput="updatePaymentBalanceIndicator()" style="margin-top:8px;">
       ${photoBlockHtml('transfer', d.transfer, 'عکس فیش واریز (اختیاری)')}
       <label>یادداشت (اختیاری)</label>
       <textarea id="pay_transfer_note">${escapeHtml(d.transfer.note||'')}</textarea>
@@ -3955,6 +4053,16 @@ function handleIncomingShare(){
     toast('متن از واتس‌اپ دریافت شد، بررسی کن');
   }
 }
+
+window.addEventListener('unhandledrejection', (event) => {
+  console.error('Unhandled error:', event.reason);
+  const msg = (event.reason && event.reason.message) || String(event.reason);
+  if(msg && msg.toLowerCase().includes('quota')){
+    toast('⚠ حافظه‌ی گوشی پر شده! برو تنظیمات → پاکسازی عکس‌های قدیمی', true);
+  } else {
+    toast('⚠ خطا: ' + msg, true);
+  }
+});
 
 console.log('پیک سوشین - نسخه', APP_VERSION);
 loadOrders();
