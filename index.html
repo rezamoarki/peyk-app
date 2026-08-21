@@ -196,6 +196,9 @@ textarea{min-height:64px;resize:vertical;}
     <button class="fab secondary" id="historyBtn">تاریخچه</button>
     <button class="fab primary" id="addBtn">+ سفارش جدید</button>
   </div>
+  <div style="text-align:center;margin-top:6px;">
+    <button id="addBtnAlt" style="background:none;border:none;color:var(--muted);font-size:12px;text-decoration:underline;padding:4px;">🖼 از گالری یا ورود دستی</button>
+  </div>
 </div>
 
 <input type="file" id="newOrderCameraInput" class="hidden-file-input" accept="image/*" capture="environment" onchange="onNewOrderPhotoTaken(event)">
@@ -207,7 +210,7 @@ textarea{min-height:64px;resize:vertical;}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script>
-const APP_VERSION = 'v9.9 · 2026-08-17';
+const APP_VERSION = 'v10.0 · 2026-08-17';
 const STORAGE_KEY_PREFIX = 'orders:';
 const EXPENSE_KEY_PREFIX = 'expenses:';
 const EXPENSE_CATEGORIES = ['بنزین', 'خرید فروشگاهی', 'سایر'];
@@ -2165,10 +2168,7 @@ function startNewOrderFlow(){
       </div>
       <p style="font-size:14px;line-height:1.7;">عکس فیش رو از کجا بگیرم؟</p>
       <div class="save-bar">
-        <button class="save" onclick="closeModal();document.getElementById('newOrderCameraInput').click()">📷 دوربین</button>
-      </div>
-      <div class="save-bar">
-        <button class="cancel" onclick="closeModal();document.getElementById('newOrderGalleryInput').click()">🖼 از گالری</button>
+        <button class="save" onclick="closeModal();document.getElementById('newOrderGalleryInput').click()">🖼 از گالری</button>
       </div>
       <div class="save-bar">
         <button class="cancel" onclick="openOrderModal(null)">✏️ ورود دستی</button>
@@ -4016,7 +4016,8 @@ function openHistoryDay(key){
   renderReportSheet(item.orders, key, isToday);
 }
 
-document.getElementById('addBtn').addEventListener('click', startNewOrderFlow);
+document.getElementById('addBtn').addEventListener('click', () => { document.getElementById('newOrderCameraInput').click(); });
+document.getElementById('addBtnAlt').addEventListener('click', startNewOrderFlow);
 document.getElementById('historyBtn').addEventListener('click', openHistory);
 document.getElementById('expensesBtn').addEventListener('click', openExpensesManager);
 document.getElementById('settingsBtn').addEventListener('click', openSettings);
@@ -4054,13 +4055,19 @@ window.addEventListener('unhandledrejection', (event) => {
 });
 
 console.log('پیک سوشین - نسخه', APP_VERSION);
+let _loadedDayKey = todayKey();
 loadOrders();
 handleIncomingShare();
 
 setInterval(() => {
   const modalOpen = (document.getElementById('modalRoot') || {}).innerHTML;
   if(!modalOpen){
-    render();
+    if(todayKey() !== _loadedDayKey){
+      _loadedDayKey = todayKey();
+      loadOrders();
+    } else {
+      render();
+    }
   }
 }, 60000);
 
