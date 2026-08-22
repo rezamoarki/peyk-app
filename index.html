@@ -194,10 +194,17 @@ textarea{min-height:64px;resize:vertical;}
 <div class="fab-row">
   <div class="fab-inner">
     <button class="fab secondary" id="historyBtn">تاریخچه</button>
-    <button class="fab primary" id="addBtn">+ سفارش جدید</button>
-  </div>
-  <div style="text-align:center;margin-top:6px;">
-    <button id="addBtnAlt" style="background:none;border:none;color:var(--muted);font-size:12px;text-decoration:underline;padding:4px;">🖼 از گالری یا ورود دستی</button>
+    <div style="flex:1;display:flex;border-radius:14px;overflow:hidden;">
+      <button id="addBtnCamera" style="flex:1.3;background:var(--amber);color:var(--amber-ink);border:none;font-family:inherit;font-weight:700;font-size:12px;padding:10px 2px;display:flex;flex-direction:column;align-items:center;gap:2px;">
+        <span style="font-size:18px;">📷</span>دوربین
+      </button>
+      <button id="addBtnGallery" style="flex:1;background:var(--amber);color:var(--amber-ink);border:none;border-right:1px solid rgba(0,0,0,.18);font-family:inherit;font-weight:700;font-size:11px;padding:10px 2px;display:flex;flex-direction:column;align-items:center;gap:2px;">
+        <span style="font-size:18px;">🖼</span>گالری
+      </button>
+      <button id="addBtnManual" style="flex:1;background:var(--amber);color:var(--amber-ink);border:none;border-right:1px solid rgba(0,0,0,.18);font-family:inherit;font-weight:700;font-size:11px;padding:10px 2px;display:flex;flex-direction:column;align-items:center;gap:2px;">
+        <span style="font-size:18px;">✏️</span>دستی
+      </button>
+    </div>
   </div>
 </div>
 
@@ -210,7 +217,7 @@ textarea{min-height:64px;resize:vertical;}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script>
-const APP_VERSION = 'v10.0 · 2026-08-17';
+const APP_VERSION = 'v10.2 · 2026-08-17';
 const STORAGE_KEY_PREFIX = 'orders:';
 const EXPENSE_KEY_PREFIX = 'expenses:';
 const EXPENSE_CATEGORIES = ['بنزین', 'خرید فروشگاهی', 'سایر'];
@@ -2157,26 +2164,6 @@ function showCancelledList(){
   </div>`;
 }
 
-function startNewOrderFlow(){
-  const root = document.getElementById('modalRoot');
-  root.innerHTML = `
-  <div class="overlay">
-    <div class="sheet" style="max-width:380px;border-radius:16px;">
-      <div class="sheet-head">
-        <h2>سفارش جدید</h2>
-        <button class="close-x" onclick="closeModal()">×</button>
-      </div>
-      <p style="font-size:14px;line-height:1.7;">عکس فیش رو از کجا بگیرم؟</p>
-      <div class="save-bar">
-        <button class="save" onclick="closeModal();document.getElementById('newOrderGalleryInput').click()">🖼 از گالری</button>
-      </div>
-      <div class="save-bar">
-        <button class="cancel" onclick="openOrderModal(null)">✏️ ورود دستی</button>
-      </div>
-    </div>
-  </div>`;
-}
-
 function onNewOrderPhotoTaken(evt){
   const file = evt.target.files[0];
   if(!file) return;
@@ -4016,8 +4003,9 @@ function openHistoryDay(key){
   renderReportSheet(item.orders, key, isToday);
 }
 
-document.getElementById('addBtn').addEventListener('click', () => { document.getElementById('newOrderCameraInput').click(); });
-document.getElementById('addBtnAlt').addEventListener('click', startNewOrderFlow);
+document.getElementById('addBtnCamera').addEventListener('click', () => { document.getElementById('newOrderCameraInput').click(); });
+document.getElementById('addBtnGallery').addEventListener('click', () => { document.getElementById('newOrderGalleryInput').click(); });
+document.getElementById('addBtnManual').addEventListener('click', () => { openOrderModal(null); });
 document.getElementById('historyBtn').addEventListener('click', openHistory);
 document.getElementById('expensesBtn').addEventListener('click', openExpensesManager);
 document.getElementById('settingsBtn').addEventListener('click', openSettings);
