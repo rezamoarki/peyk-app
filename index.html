@@ -33,8 +33,8 @@
   --cash:#EF9F27;
   --card-pay:#5DCAA5;
   --red:#E0645F;
-  --muted:#8B909B;
-  --text:#EDEEF0;
+  --muted:#A6ABB5;
+  --text:#FFFFFF;
   --tip-ink:#146c2e;
   --tip-bg:#DFF5E3;
   --deficit-ink:#791F1F;
@@ -43,14 +43,14 @@
 *{box-sizing:border-box;}
 html,body{margin:0;padding:0;background:var(--bg);color:var(--text);font-family:'Vazirmatn',sans-serif;}
 body{padding-bottom:90px;min-height:100vh;}
-.mono{font-family:'JetBrains Mono',monospace;}
+.mono{font-family:'JetBrains Mono',monospace;font-weight:700;}
 .wrap{max-width:520px;margin:0 auto;padding:14px 14px 0;}
 
 header.top{position:sticky;top:0;z-index:20;background:var(--bg);border-bottom:1px solid var(--line);padding-bottom:10px;}
 .title-row{display:flex;align-items:center;justify-content:space-between;padding-top:12px;}
 .title-row h1{font-size:19px;font-weight:700;margin:0;letter-spacing:.2px;}
 .title-row .sub{font-size:12px;color:var(--muted);margin-top:2px;}
-.date-chip{font-size:12px;background:var(--card2);border:1px solid var(--line);border-radius:20px;padding:5px 12px;color:var(--muted);}
+.date-chip{font-size:13px;font-weight:600;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:7px 4px;color:var(--text);text-align:center;}
 .mini-btn{background:var(--card2);border:1px solid var(--line);color:var(--text);font-size:12px;padding:6px 10px;border-radius:8px;font-family:inherit;}
 
 .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:12px;}
@@ -59,9 +59,9 @@ header.top{position:sticky;top:0;z-index:20;background:var(--bg);border-bottom:1
 .received-panel-head .sub-inline{font-size:12px;color:var(--muted);}
 .received-line{display:flex;justify-content:space-between;align-items:center;font-size:13px;padding:5px 0;border-bottom:1px solid var(--line);}
 .received-line:last-child{border-bottom:none;}
-.stat{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:6px 6px;text-align:center;}
-.stat b{display:block;font-size:14px;font-family:'JetBrains Mono',monospace;font-weight:700;}
-.stat span{font-size:10.5px;color:var(--muted);}
+.stat{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:5px 4px;text-align:center;display:flex;align-items:baseline;justify-content:center;gap:5px;}
+.stat b{font-size:15px;font-family:'JetBrains Mono',monospace;font-weight:700;}
+.stat span{font-size:11px;color:var(--muted);}
 .stat.cash b{color:var(--cash);}
 .stat.card b{color:var(--card-pay);}
 .forex-note{font-size:11.5px;color:var(--muted);text-align:center;margin-top:6px;}
@@ -72,11 +72,11 @@ header.top{position:sticky;top:0;z-index:20;background:var(--bg);border-bottom:1
 .order.active{box-shadow:0 0 0 2px var(--amber),0 2px 6px rgba(0,0,0,.35);}
 .order-body{padding:12px 14px 10px;}
 .order-top{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;}
-.order-num{font-size:12px;color:#8a8574;font-family:'JetBrains Mono',monospace;margin-top:6px;}
+.order-num{font-size:12px;color:#8a8574;font-family:'JetBrains Mono',monospace;font-weight:700;margin-top:6px;}
 .order-name{font-size:19px;font-weight:700;margin:0 0 2px;}
 .order-addr{font-size:12px;color:#4a463a;line-height:1.5;margin-bottom:6px;}
 .order-meta{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;}
-.badge{font-size:11.5px;padding:3px 9px;border-radius:20px;font-weight:600;}
+.badge{font-size:11.5px;padding:3px 9px;border-radius:20px;font-weight:600;font-family:'Vazirmatn',sans-serif;}
 .badge.cash{background:#FAEEDA;color:var(--amber-ink);}
 .badge.card{background:#E1F5EE;color:var(--teal-ink);}
 .badge.transfer{background:#E6F1FB;color:var(--blue-ink);}
@@ -180,7 +180,10 @@ textarea{min-height:64px;resize:vertical;}
     </div>
     <div class="received-panel">
       <div class="received-panel-head">
-        <span><b id="statTotal">0</b> <span class="sub-inline">دریافتی (TL)</span></span>
+        <div>
+          <span><b id="statTotal">0</b> <span class="sub-inline">کل مبلغ دریافتی</span></span>
+          <div id="statForexLine" style="font-size:11px;color:var(--muted);margin-top:2px;display:none;"></div>
+        </div>
         <button id="receivedToggleBtn" class="mini-btn" onclick="toggleReceivedPanel()">مخفی کن</button>
       </div>
       <div id="receivedPanelBody"></div>
@@ -193,16 +196,16 @@ textarea{min-height:64px;resize:vertical;}
 
 <div class="fab-row">
   <div class="fab-inner">
-    <button class="fab secondary" id="historyBtn">تاریخچه</button>
-    <div style="flex:1;display:flex;border-radius:14px;overflow:hidden;">
-      <button id="addBtnCamera" style="flex:1.3;background:var(--amber);color:var(--amber-ink);border:none;font-family:inherit;font-weight:700;font-size:12px;padding:10px 2px;display:flex;flex-direction:column;align-items:center;gap:2px;">
-        <span style="font-size:18px;">📷</span>دوربین
+    <button class="fab secondary" id="historyBtn" style="flex:0.7;padding:11px 4px;">تاریخچه</button>
+    <div style="flex:1.3;display:flex;border-radius:14px;overflow:hidden;">
+      <button id="addBtnCamera" style="flex:1;background:var(--amber);color:var(--amber-ink);border:none;font-family:inherit;font-weight:700;font-size:11px;padding:9px 2px;display:flex;flex-direction:column;align-items:center;gap:2px;">
+        <span style="font-size:16px;">📷</span>دوربین
       </button>
-      <button id="addBtnGallery" style="flex:1;background:var(--amber);color:var(--amber-ink);border:none;border-right:1px solid rgba(0,0,0,.18);font-family:inherit;font-weight:700;font-size:11px;padding:10px 2px;display:flex;flex-direction:column;align-items:center;gap:2px;">
-        <span style="font-size:18px;">🖼</span>گالری
+      <button id="addBtnGallery" style="flex:1;background:var(--amber);color:var(--amber-ink);border:none;border-right:1px solid rgba(0,0,0,.18);font-family:inherit;font-weight:700;font-size:11px;padding:9px 2px;display:flex;flex-direction:column;align-items:center;gap:2px;">
+        <span style="font-size:16px;">🖼</span>گالری
       </button>
-      <button id="addBtnManual" style="flex:1;background:var(--amber);color:var(--amber-ink);border:none;border-right:1px solid rgba(0,0,0,.18);font-family:inherit;font-weight:700;font-size:11px;padding:10px 2px;display:flex;flex-direction:column;align-items:center;gap:2px;">
-        <span style="font-size:18px;">✏️</span>دستی
+      <button id="addBtnManual" style="flex:1;background:var(--amber);color:var(--amber-ink);border:none;border-right:1px solid rgba(0,0,0,.18);font-family:inherit;font-weight:700;font-size:11px;padding:9px 2px;display:flex;flex-direction:column;align-items:center;gap:2px;">
+        <span style="font-size:16px;">✏️</span>دستی
       </button>
     </div>
   </div>
@@ -217,7 +220,7 @@ textarea{min-height:64px;resize:vertical;}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script>
-const APP_VERSION = 'v10.2 · 2026-08-17';
+const APP_VERSION = 'v10.8 · 2026-08-17';
 const STORAGE_KEY_PREFIX = 'orders:';
 const EXPENSE_KEY_PREFIX = 'expenses:';
 const EXPENSE_CATEGORIES = ['بنزین', 'خرید فروشگاهی', 'سایر'];
@@ -420,7 +423,21 @@ const CAESAR_RESORT_BLOCKS = [
   {n:35,name:'Arrius',phase:4},{n:36,name:'Amadeus',phase:4},{n:37,name:'Atilius',phase:4},
   {n:38,name:'Severus',phase:4},{n:39,name:'Socrates',phase:4},{n:40,name:'Didius',phase:4},
   {n:41,name:'Clarus',phase:4},{n:42,name:'Pompeus',phase:4},
-  {n:43,name:'Marcellus',phase:1},{n:44,name:'Cyrus',phase:1},{n:45,name:'Darius',phase:1}
+  {n:43,name:'Marcellus',phase:1},{n:44,name:'Cyrus',phase:1},{n:45,name:'Darius',phase:1},
+  {n:46,name:'Hilarius',phase:2},{n:47,name:'Antonius',phase:2},{n:48,name:'Quintus',phase:2},
+  {n:49,name:'Saturn',phase:2},{n:50,name:'Zeno',phase:2},{n:51,name:'Valentinian',phase:2},
+  {n:52,name:'Florian',phase:2},{n:53,name:'Libre',phase:2},
+  {n:54,name:'Consus',phase:5},{n:55,name:'Fabius',phase:5},{n:56,name:'Pertinax',phase:5},
+  {n:57,name:'Koh Tao',phase:6},{n:58,name:'Koh Phangan',phase:6},{n:59,name:'Koh Lipe',phase:6},
+  {n:60,name:'Koh Samui',phase:6},{n:61,name:'Epictetus',phase:6},{n:62,name:'Cicero',phase:6},
+  {n:63,name:'Koh Wai',phase:6},
+  {n:64,name:'Albus',phase:7},{n:65,name:'Jupiter',phase:7},{n:66,name:'Aleksandrius',phase:7},
+  {n:67,name:'Neptune',phase:7},{n:68,name:'Verus',phase:7},{n:69,name:'Vespasian',phase:7},
+  {n:70,name:'Seneca',phase:7},{n:71,name:'Arcadius',phase:7},
+  {n:72,name:'Koh Phai',phase:8},{n:73,name:'Koh He',phase:8},{n:74,name:'Koh Mak',phase:8},
+  {n:75,name:'Koh Rang',phase:8},{n:76,name:'Bangkok',phase:8},{n:77,name:'Krabi',phase:8},
+  {n:78,name:'Koh Lanta',phase:8},{n:79,name:'Phuket',phase:8},{n:80,name:'Pattaya',phase:8},
+  {n:81,name:'Koh Mai Si',phase:9},{n:82,name:'Khaosan',phase:9},{n:83,name:'Ao Nang',phase:9}
 ];
 
 const CAESAR_NAME_FA_VARIANTS = {
@@ -435,7 +452,17 @@ const CAESAR_NAME_FA_VARIANTS = {
   Romulus:['رومولوس'], Remus:['رموس'], Italus:['ایتالوس'], Arrius:['آریوس'],
   Amadeus:['آمادئوس','آمادیوس'], Atilius:['آتیلیوس'], Severus:['سوروس'], Socrates:['سقراط','سوکراتس'],
   Didius:['دیدیوس'], Clarus:['کلاروس'], Pompeus:['پومپئوس'], Marcellus:['مارسلوس'],
-  Cyrus:['سایروس','کوروش'], Darius:['داریوش','داریوس']
+  Cyrus:['سایروس','کوروش'], Darius:['داریوش','داریوس'],
+  Hilarius:['هیلاریوس'], Antonius:['آنتونیوس'], Quintus:['کوینتوس'], Saturn:['ساترن'],
+  Zeno:['زنون','زینو'], Valentinian:['والنتینیان'], Florian:['فلوریان'], Libre:['لیبره'],
+  Consus:['کونسوس'], Fabius:['فابیوس'], Pertinax:['پرتیناکس'],
+  'Koh Tao':['کوتائو'], 'Koh Phangan':['کوپانگان'], 'Koh Lipe':['کولیپه'], 'Koh Samui':['کوسامویی'],
+  Epictetus:['اپیکتتوس'], Cicero:['سیسرو'], 'Koh Wai':['کووای'],
+  Albus:['آلبوس'], Jupiter:['ژوپیتر'], Aleksandrius:['الکساندریوس'], Neptune:['نپتون'],
+  Verus:['وروس'], Vespasian:['وسپاسیان'], Seneca:['سنکا'], Arcadius:['آرکادیوس'],
+  'Koh Phai':['کوفای'], 'Koh He':['کوهی'], 'Koh Mak':['کوماک'], 'Koh Rang':['کورنگ'],
+  Bangkok:['بانکوک'], Krabi:['کرابی'], 'Koh Lanta':['کولانتا'], Phuket:['پوکت'], Pattaya:['پاتایا'],
+  'Koh Mai Si':['کومایسی'], Khaosan:['خائوسان'], 'Ao Nang':['آئونانگ']
 };
 
 function findCaesarBlockMatch(text){
@@ -574,8 +601,8 @@ function seedCaesarResortBlocks(){
     if(existingIds.has(id)) return;
     toAdd.push({
       id: id,
-      name: 'سزار - بلاک ' + b.n + ' (' + b.name + ')',
-      address: 'شهرک سزار (Caesar Resort) - فاز ' + b.phase + ' - بلاک شماره ' + b.n + ' - ' + b.name,
+      name: 'F' + b.phase + ' - B' + b.n + ' - ' + b.name,
+      address: 'F' + b.phase + ' - B' + b.n + ' - ' + b.name,
       mapLink: null,
       group: 'شهرک سزار ریسورت (Caesar Resort)',
       subGroup: 'فاز ' + b.phase,
@@ -592,15 +619,26 @@ function migrateCaesarLocationGroups(){
   const list = getSavedLocations();
   let changed = false;
   list.forEach(l => {
-    if(l.id && l.id.indexOf('loc_caesar_') === 0 && !l.group){
+    if(l.id && l.id.indexOf('loc_caesar_') === 0){
       const n = parseInt(l.id.replace('loc_caesar_',''), 10);
       const block = CAESAR_RESORT_BLOCKS.find(b => b.n === n);
       if(block){
-        l.group = 'شهرک سزار ریسورت (Caesar Resort)';
-        l.subGroup = 'فاز ' + block.phase;
-        l.subGroupOrder = block.phase;
-        l.sortKey = block.n;
-        changed = true;
+        if(!l.group){
+          l.group = 'شهرک سزار ریسورت (Caesar Resort)';
+          l.subGroup = 'فاز ' + block.phase;
+          l.subGroupOrder = block.phase;
+          l.sortKey = block.n;
+          changed = true;
+        }
+        const compactFormat = 'F' + block.phase + ' - B' + block.n + ' - ' + block.name;
+        if(l.name !== compactFormat){
+          l.name = compactFormat;
+          changed = true;
+        }
+        if(l.address !== compactFormat){
+          l.address = compactFormat;
+          changed = true;
+        }
       }
     }
   });
@@ -667,7 +705,7 @@ function openLocationsManager(){
         <button class="save" onclick="openLocationForm(null)">+ لوکیشن جدید</button>
       </div>
       <div class="save-bar" style="margin-bottom:4px;">
-        <button class="cancel" onclick="seedCaesarResortBlocksFromSettings()">🏛 بارگذاری بلاک‌های شهرک سزار (۴۵ تا)</button>
+        <button class="cancel" onclick="seedCaesarResortBlocksFromSettings()">🏛 بارگذاری بلاک‌های شهرک سزار (۸۳ تا)</button>
       </div>
       <div class="save-bar" style="margin-bottom:4px;">
         <button class="cancel" onclick="exportLocationsKml()">📤 خروجی KML (برای Map Marker)</button>
@@ -679,11 +717,12 @@ function openLocationsManager(){
 }
 
 function locationCardHtml(l){
+  const isCaesar = l.id && l.id.indexOf('loc_caesar_') === 0;
   return `
     <div class="order">
       <div class="order-body">
         <div class="order-name">${escapeHtml(l.name)}</div>
-        <div class="order-addr">${escapeHtml(l.address || '')}${l.mapLink ? ' <span style="color:var(--teal);">(لینک نقشه دارد)</span>' : ''}</div>
+        ${isCaesar ? '' : `<div class="order-addr">${escapeHtml(l.address || '')}${l.mapLink ? ' <span style="color:var(--teal);">(لینک نقشه دارد)</span>' : ''}</div>`}
         <div class="order-actions">
           <button onclick="openMap(getNavQueryForAddress('${escapeJs(l.address||'')}', ${l.mapLink ? `'${escapeJs(l.mapLink)}'` : 'null'}))">نقشه</button>
           <button onclick="openLocationForm('${l.id}')">ویرایش</button>
@@ -787,7 +826,12 @@ function openLocationForm(id, prefill){
       <label>اسم (اختیاری — اگه خالی بذاری خودمون یه اسم موقت می‌ذاریم)</label>
       <input type="text" id="loc_name" value="${escapeHtml(initial.name || '')}">
       <label>آدرس / توضیح مسیر</label>
-      <textarea id="loc_address" style="min-height:90px;">${escapeHtml(initial.address || '')}</textarea>
+      <textarea id="loc_address" style="min-height:90px;" oninput="showSimilarLocationSuggestions()">${escapeHtml(initial.address || '')}</textarea>
+      <div id="locSimilarSuggestions"></div>
+      ${id && id.indexOf('loc_caesar_') === 0 ? '' : `
+      <label>منطقه (اختیاری — اگه خالی بذاری، خودش از روی آدرس‌های مشابه قبلی حدس می‌زنه)</label>
+      <input type="text" id="loc_region" value="${escapeHtml(initial.region || '')}" placeholder="مثلاً: لانگ‌بیچ، اسکله، مگوسا...">
+      `}
       <label>لینک لوکیشن واتس‌اپ رو اینجا نگه‌دار و Paste کن</label>
       <input type="text" id="loc_paste_input" placeholder="اینجا لمس کن، نگه‌دار، Paste بزن..." oninput="onLocationLinkPasteInput()" style="direction:ltr;text-align:left;">
       <div id="locMapLinkStatus" class="order-note" style="margin-top:4px;">${initial.mapLink ? 'لینک نقشه ثبت شده ✓' : 'لینک نقشه‌ای ثبت نشده (اختیاری)'}</div>
@@ -967,22 +1011,58 @@ async function runLocationAiRead(){
   btn.disabled = false;
 }
 
+function showSimilarLocationSuggestions(){
+  const wrap = document.getElementById('locSimilarSuggestions');
+  if(!wrap) return;
+  const addr = (document.getElementById('loc_address') || {}).value || '';
+  if(addr.trim().length < 4){ wrap.innerHTML = ''; return; }
+  const list = getSavedLocations();
+  const scored = list
+    .map(l => ({ l, score: textSimilarity(addr, l.address || '') }))
+    .filter(x => x.score >= 0.3 && (x.l.region))
+    .sort((a,b) => b.score - a.score)
+    .slice(0, 3);
+  if(scored.length === 0){ wrap.innerHTML = ''; return; }
+  wrap.innerHTML = `
+    <div class="order-note" style="margin-top:2px;">شبیه به آدرس‌های قبلی:</div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px;">
+      ${scored.map(x => `<button type="button" class="mini-btn" onclick="const el=document.getElementById('loc_region'); if(el) el.value='${escapeJs(x.l.region)}';">📍 ${escapeHtml(x.l.region)}</button>`).join('')}
+    </div>
+  `;
+}
+
+function guessRegionFromSimilarLocations(address){
+  const list = getSavedLocations();
+  let best = null, bestScore = 0;
+  list.forEach(l => {
+    if(!l.region) return;
+    const score = textSimilarity(address, l.address || '');
+    if(score > bestScore){ bestScore = score; best = l.region; }
+  });
+  return bestScore >= 0.3 ? best : null;
+}
+
 function saveLocationForm(id){
   let name = document.getElementById('loc_name').value.trim();
   let address = document.getElementById('loc_address').value.trim();
+  let region = (document.getElementById('loc_region') || {}).value || '';
+  region = region.trim();
   const mapLink = window._locFormMapLink || null;
   if(!address && !mapLink){
     toast('حداقل آدرس یا لینک نقشه رو وارد کن');
     return;
   }
   if(!address) address = '(بدون آدرس متنی — لینک نقشه موجوده)';
+  if(!region && address && !(id && id.indexOf('loc_caesar_') === 0)){
+    region = guessRegionFromSimilarLocations(address) || '';
+  }
   if(!name){
     name = 'لوکیشن ' + new Date().toLocaleDateString('fa-IR-u-ca-gregory') + ' ' + new Date().toLocaleTimeString('fa-IR', { hour:'2-digit', minute:'2-digit' });
   }
   const list = getSavedLocations();
   if(id){
     const idx = list.findIndex(l => l.id === id);
-    if(idx > -1) list[idx] = { ...list[idx], name, address, mapLink: mapLink || list[idx].mapLink || null };
+    if(idx > -1) list[idx] = { ...list[idx], name, address, region, mapLink: mapLink || list[idx].mapLink || null };
   } else {
     const normAddr = address.trim().toLowerCase();
     const existingMatch = list.find(l =>
@@ -996,6 +1076,7 @@ function saveLocationForm(id){
         existingMatch.name = name;
       }
       existingMatch.address = address;
+      if(region) existingMatch.region = region;
       if(mapLink) existingMatch.mapLink = mapLink;
       setSavedLocations(list);
       closeLocationForm();
@@ -1003,7 +1084,7 @@ function saveLocationForm(id){
       toast('این آدرس از قبل توی لیست بود — به‌جای تکراری، بروزرسانی شد');
       return;
     } else {
-      list.push({ id: 'loc_' + Date.now() + '_' + Math.random().toString(36).slice(2,7), name, address, mapLink });
+      list.push({ id: 'loc_' + Date.now() + '_' + Math.random().toString(36).slice(2,7), name, address, region, mapLink });
     }
   }
   setSavedLocations(list);
@@ -1065,7 +1146,7 @@ function renderLocationPickList(){
     <div class="order" style="cursor:pointer;" onclick='applyPickedLocation("${l.id}")'>
       <div class="order-body">
         <div class="order-name">${escapeHtml(l.name)}</div>
-        <div class="order-addr">${escapeHtml(l.address || '')}</div>
+        ${l.id && l.id.indexOf('loc_caesar_') === 0 ? '' : `<div class="order-addr">${escapeHtml(l.address || '')}</div>`}
       </div>
     </div>
   `).join('');
@@ -1764,6 +1845,17 @@ function render(){
   document.getElementById('statDelivered').textContent = delivered.length;
   document.getElementById('statTotal').textContent = fmt(tlTotal);
   document.getElementById('statCancelled').textContent = cancelled.length;
+  const forexLineEl = document.getElementById('statForexLine');
+  if(forexLineEl){
+    const forexKeys = Object.keys(forexTotals);
+    if(forexKeys.length > 0){
+      forexLineEl.textContent = '+ ' + forexKeys.map(code => fmt(forexTotals[code]) + ' ' + currencySymbol(code)).join(' + ');
+      forexLineEl.style.display = '';
+    } else {
+      forexLineEl.textContent = '';
+      forexLineEl.style.display = 'none';
+    }
+  }
   renderReceivedPanel();
 
   const forexNote = document.getElementById('forexNote');
@@ -1777,10 +1869,6 @@ function render(){
 
   const main = document.getElementById('mainContent');
   let html = '';
-
-  if(pending.length === 0 && delivered.length === 0){
-    html += '<div class="empty" style="margin-top:14px;">هنوز سفارشی ثبت نشده. با دکمه پایین شروع کن.</div>';
-  }
 
   if(pending.length > 0){
     const active = pending[0];
@@ -3308,7 +3396,7 @@ function renderPaymentSections(){
 
   <div class="order" style="background:var(--card);color:var(--text);border:1px solid var(--line);">
     <div class="order-body">
-      <div class="order-num" style="font-size:15px;font-weight:700;color:var(--text);">کارت</div>
+      <div style="font-size:15px;font-weight:700;color:var(--text);font-family:inherit;">کارت</div>
       ${d.cards.map((c,i) => `
         <div style="${i>0?'border-top:1px dashed var(--line);margin-top:10px;padding-top:10px;':''}">
           ${d.cards.length > 1 ? `<div style="text-align:left;"><button class="danger" style="padding:2px 10px;" onclick="removeCardEntry(${i})">حذف این کارت</button></div>` : ''}
@@ -3325,7 +3413,7 @@ function renderPaymentSections(){
 
   <div class="order" style="background:var(--card);color:var(--text);border:1px solid var(--line);">
     <div class="order-body">
-      <div class="order-num" style="font-size:15px;font-weight:700;color:var(--text);">نقد</div>
+      <div style="font-size:15px;font-weight:700;color:var(--text);font-family:inherit;">نقد</div>
       <label>مبلغ</label>
       <input type="text" inputmode="numeric" id="pay_cash_tl" value="${d.cashTL!=null?d.cashTL:''}" oninput="updatePaymentBalanceIndicator()">
 
@@ -3363,7 +3451,7 @@ function renderPaymentSections(){
 
   <div class="order" style="background:var(--card);color:var(--text);border:1px solid var(--line);">
     <div class="order-body">
-      <div class="order-num" style="font-size:15px;font-weight:700;color:var(--text);">واریز به حساب</div>
+      <div style="font-size:15px;font-weight:700;color:var(--text);font-family:inherit;">واریز به حساب</div>
       <input type="text" inputmode="numeric" id="pay_transfer_tl" value="${d.transfer.amountTL!=null?d.transfer.amountTL:''}" oninput="updatePaymentBalanceIndicator()" style="margin-top:8px;">
       ${photoBlockHtml('transfer', d.transfer, 'عکس فیش واریز (اختیاری)')}
       <label>یادداشت (اختیاری)</label>
