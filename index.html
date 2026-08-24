@@ -222,7 +222,7 @@ textarea{min-height:64px;resize:vertical;}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script>
-const APP_VERSION = 'v12.2 · 2026-08-17';
+const APP_VERSION = 'v12.3 · 2026-08-17';
 const STORAGE_KEY_PREFIX = 'orders:';
 const EXPENSE_KEY_PREFIX = 'expenses:';
 const EXPENSE_CATEGORIES = ['بنزین', 'خرید فروشگاهی', 'سایر'];
@@ -3270,9 +3270,12 @@ function declineReadAndEdit(){
 function legacyPaymentToDraft(o){
   const draft = {
     online: { used: !!o.paidOnlineHint, amountTL:'', note:'', posPhoto:null, posMedia:null },
+    cardUsed: false,
     cards: [{ amountTL:'', posPhoto:null, posMedia:null }],
+    cashUsed: false,
     cashTL: '',
     forex: [],
+    transferUsed: false,
     transfer: { amountTL:'', note:'', posPhoto:null, posMedia:null },
     changeGiven: ''
   };
@@ -3283,14 +3286,18 @@ function legacyPaymentToDraft(o){
     if(p.method === 'آنلاین'){
       draft.online = { used:true, amountTL: p.amountTL!=null?p.amountTL:'', note:p.note||'', posPhoto:p.posPhoto||null, posMedia:p.posMedia||null };
     } else if(p.method === 'کارت'){
+      draft.cardUsed = true;
       if(firstCard){ draft.cards = []; firstCard = false; }
       draft.cards.push({ amountTL: p.amountTL, posPhoto:p.posPhoto||null, posMedia:p.posMedia||null });
     } else if(p.method === 'نقد'){
+      draft.cashUsed = true;
       draft.cashTL = p.grossAmountTL != null ? p.grossAmountTL : p.amountTL;
       if(p.changeGiven) draft.changeGiven = p.changeGiven;
     } else if(p.method === 'ارز'){
+      draft.cashUsed = true;
       draft.forex.push({ currency: p.currency, amount: p.currencyAmount, rate: p.rate || '' });
     } else if(p.method === 'واریز'){
+      draft.transferUsed = true;
       draft.transfer = { amountTL: p.amountTL, note: p.note||'', posPhoto:p.posPhoto||null, posMedia:p.posMedia||null };
     }
   });
@@ -3445,6 +3452,13 @@ function syncPaymentDraftFromDom(){
   const onlineNote = document.getElementById('pay_online_note');
   if(onlineNote) d.online.note = onlineNote.value;
 
+  const cardUsedEl = document.getElementById('pay_card_used');
+  if(cardUsedEl) d.cardUsed = cardUsedEl.checked;
+  const cashUsedEl = document.getElementById('pay_cash_used');
+  if(cashUsedEl) d.cashUsed = cashUsedEl.checked;
+  const transferUsedEl = document.getElementById('pay_transfer_used');
+  if(transferUsedEl) d.transferUsed = transferUsedEl.checked;
+
   document.querySelectorAll('.card-amount').forEach(el => {
     const i = Number(el.dataset.idx);
     if(d.cards[i]) d.cards[i].amountTL = el.value;
@@ -3543,6 +3557,39 @@ function applyCashChange(handed, change){
 function togglePayOnline(){
   syncPaymentDraftFromDom();
   paymentDraft.online.used = document.getElementById('pay_online_used').checked;
+  if(!paymentDraft.online.used){
+    paymentDraft.online.amountTL = '';
+    paymentDraft.online.note = '';
+  }
+  renderPaymentSections();
+}
+
+function togglePayCard(){
+  syncPaymentDraftFromDom();
+  paymentDraft.cardUsed = document.getElementById('pay_card_used').checked;
+  if(!paymentDraft.cardUsed){
+    paymentDraft.cards = [{ amountTL:'', posPhoto:null, posMedia:null }];
+  }
+  renderPaymentSections();
+}
+
+function togglePayCash(){
+  syncPaymentDraftFromDom();
+  paymentDraft.cashUsed = document.getElementById('pay_cash_used').checked;
+  if(!paymentDraft.cashUsed){
+    paymentDraft.cashTL = '';
+    paymentDraft.forex = [];
+    paymentDraft.changeGiven = '';
+  }
+  renderPaymentSections();
+}
+
+function togglePayTransfer(){
+  syncPaymentDraftFromDom();
+  paymentDraft.transferUsed = document.getElementById('pay_transfer_used').checked;
+  if(!paymentDraft.transferUsed){
+    paymentDraft.transfer = { amountTL:'', note:'', posPhoto:null, posMedia:null };
+  }
   renderPaymentSections();
 }
 
@@ -3661,14 +3708,15 @@ function renderPaymentSections(){
 
   <div class="order" style="background:var(--card);color:var(--text);border:1px solid var(--line);">
     <div class="order-body">
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-top:0;font-size:15px;font-weight:600;">
+        <input type="checkbox" id="pay_card_used" ${d.cardUsed ? 'checked' : ''} onchange="togglePayCard()" style="width:18px;height:18px;">
+        <span>کارت</span>
+      </label>
+      ${d.cardUsed ? `
       ${d.cards.length === 1 ? `
-      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
-        <div style="font-size:15px;font-weight:700;color:var(--text);font-family:inherit;white-space:nowrap;">کارت</div>
-        <input type="text" inputmode="numeric" class="card-amount amount-input" data-idx="0" value="${d.cards[0].amountTL!=null?d.cards[0].amountTL:''}" oninput="updatePaymentBalanceIndicator()" style="margin:0;width:130px;flex-shrink:0;">
-      </div>
+      <input type="text" inputmode="numeric" class="card-amount amount-input" data-idx="0" value="${(d.cards[0].amountTL!=null && d.cards[0].amountTL!=='') ? d.cards[0].amountTL : (o.amount||'')}" oninput="updatePaymentBalanceIndicator()" style="margin-top:8px;">
       ${photoBlockHtml('card_0', d.cards[0], getGeminiKey() ? 'عکس فیش پوز (خودکار خونده می‌شه)' : 'عکس فیش پوز')}
       ` : `
-      <div style="font-size:15px;font-weight:700;color:var(--text);font-family:inherit;">کارت</div>
       ${d.cards.map((c,i) => `
         <div style="${i>0?'border-top:1px dashed var(--line);margin-top:10px;padding-top:10px;':''}">
           <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
@@ -3681,15 +3729,18 @@ function renderPaymentSections(){
       `).join('')}
       `}
       <button type="button" class="mini-btn" style="margin-top:8px;width:100%;" onclick="addCardEntry()">+ افزودن کارت دیگر</button>
+      ` : ''}
     </div>
   </div>
 
   <div class="order" style="background:var(--card);color:var(--text);border:1px solid var(--line);">
     <div class="order-body">
-      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
-        <div style="font-size:15px;font-weight:700;color:var(--text);font-family:inherit;white-space:nowrap;">نقد</div>
-        <input type="text" inputmode="numeric" class="amount-input" id="pay_cash_tl" value="${d.cashTL!=null?d.cashTL:''}" oninput="updatePaymentBalanceIndicator()" style="margin:0;width:130px;flex-shrink:0;">
-      </div>
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-top:0;font-size:15px;font-weight:600;">
+        <input type="checkbox" id="pay_cash_used" ${d.cashUsed ? 'checked' : ''} onchange="togglePayCash()" style="width:18px;height:18px;">
+        <span>نقد</span>
+      </label>
+      ${d.cashUsed ? `
+      <input type="text" inputmode="numeric" class="amount-input" id="pay_cash_tl" value="${(d.cashTL!=null && d.cashTL!=='') ? d.cashTL : (o.amount||'')}" oninput="updatePaymentBalanceIndicator()" style="margin-top:8px;">
 
       <div style="border-top:1px dashed var(--line);margin-top:10px;padding-top:10px;">
         <label>مبلغی که مشتری داد (برای محاسبه‌ی مانده)</label>
@@ -3718,18 +3769,22 @@ function renderPaymentSections(){
 
       <label style="margin-top:10px;">مبلغی که بابت باقی پس دادی</label>
       <input type="text" inputmode="numeric" id="pay_change_given" value="${d.changeGiven!=null?d.changeGiven:''}" oninput="updatePaymentBalanceIndicator()">
+      ` : ''}
     </div>
   </div>
 
   <div class="order" style="background:var(--card);color:var(--text);border:1px solid var(--line);">
     <div class="order-body">
-      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
-        <div style="font-size:15px;font-weight:700;color:var(--text);font-family:inherit;white-space:nowrap;">واریز به حساب</div>
-        <input type="text" inputmode="numeric" class="amount-input" id="pay_transfer_tl" value="${d.transfer.amountTL!=null?d.transfer.amountTL:''}" oninput="updatePaymentBalanceIndicator()" style="margin:0;width:130px;flex-shrink:0;">
-      </div>
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-top:0;font-size:15px;font-weight:600;">
+        <input type="checkbox" id="pay_transfer_used" ${d.transferUsed ? 'checked' : ''} onchange="togglePayTransfer()" style="width:18px;height:18px;">
+        <span>واریز به حساب</span>
+      </label>
+      ${d.transferUsed ? `
+      <input type="text" inputmode="numeric" class="amount-input" id="pay_transfer_tl" value="${(d.transfer.amountTL!=null && d.transfer.amountTL!=='') ? d.transfer.amountTL : (o.amount||'')}" oninput="updatePaymentBalanceIndicator()" style="margin-top:8px;">
       ${photoBlockHtml('transfer', d.transfer, 'عکس فیش واریز (اختیاری)')}
       <label>یادداشت (اختیاری)</label>
-      <textarea id="pay_transfer_note">${escapeHtml(d.transfer.note||'')}</textarea>
+      <textarea id="pay_transfer_note" style="min-height:36px;">${escapeHtml(d.transfer.note||'')}</textarea>
+      ` : ''}
     </div>
   </div>
   `;
