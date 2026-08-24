@@ -220,7 +220,7 @@ textarea{min-height:64px;resize:vertical;}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script>
-const APP_VERSION = 'v10.8 · 2026-08-17';
+const APP_VERSION = 'v11.0 · 2026-08-17';
 const STORAGE_KEY_PREFIX = 'orders:';
 const EXPENSE_KEY_PREFIX = 'expenses:';
 const EXPENSE_CATEGORIES = ['بنزین', 'خرید فروشگاهی', 'سایر'];
@@ -663,6 +663,12 @@ function getGeminiKey(){
 function setGeminiKey(key){
   localStorage.setItem('gemini_api_key', key);
 }
+function getNvidiaKey(){
+  return localStorage.getItem('nvidia_api_key') || '';
+}
+function setNvidiaKey(key){
+  localStorage.setItem('nvidia_api_key', key);
+}
 
 const AI_PRICE_PER_MTOK_IN = 3;
 const AI_PRICE_PER_MTOK_OUT = 15;
@@ -799,7 +805,7 @@ function renderLocationsList(){
 function openLocationForm(id, prefill){
   const existing = id ? getSavedLocations().find(l => l.id === id) : null;
   const initial = existing || prefill || { name:'', address:'', mapLink:'' };
-  const canAiRead = !!(getGeminiKey() || getApiKey());
+  const canAiRead = !!(getGeminiKey() || getNvidiaKey() || getApiKey());
   const root = document.getElementById('modalRoot');
   root.insertAdjacentHTML('beforeend', `
   <div class="overlay" style="z-index:70;">
@@ -820,7 +826,7 @@ function openLocationForm(id, prefill){
         <div class="ai-status" id="locPhotoStatus"></div>
         ${canAiRead
           ? `<button class="ai" id="locAiReadBtn" disabled onclick="runLocationAiRead()" style="width:100%;margin-top:6px;">🔎 خواندن آدرس با هوش مصنوعی از عکس</button>`
-          : `<div class="order-note" style="margin-top:6px;">برای خوندن خودکار آدرس از عکس، اول یه کلید Gemini یا کلود توی تنظیمات ذخیره کن.</div>`}
+          : `<div class="order-note" style="margin-top:6px;">برای خوندن خودکار آدرس از عکس، اول یه کلید Gemini، NVIDIA یا کلود توی تنظیمات ذخیره کن.</div>`}
       </div>
 
       <label>اسم (اختیاری — اگه خالی بذاری خودمون یه اسم موقت می‌ذاریم)</label>
@@ -940,8 +946,9 @@ async function runLocationAiRead(){
   const statusEl = document.getElementById('locPhotoStatus');
   const btn = document.getElementById('locAiReadBtn');
   const geminiKey = getGeminiKey();
+  const nvidiaKey = getNvidiaKey();
   const claudeKey = getApiKey();
-  if(!geminiKey && !claudeKey){ toast('اول یه کلید Gemini یا کلود توی تنظیمات ذخیره کن'); return; }
+  if(!geminiKey && !nvidiaKey && !claudeKey){ toast('اول یه کلید Gemini، NVIDIA یا کلود توی تنظیمات ذخیره کن'); return; }
 
   btn.disabled = true;
   statusEl.textContent = 'در حال خواندن آدرس از عکس...';
@@ -971,6 +978,23 @@ async function runLocationAiRead(){
         data.candidates[0].content.parts && data.candidates[0].content.parts[0] ?
         data.candidates[0].content.parts[0].text : '';
       parsed = JSON.parse(rawText);
+    } else if(nvidiaKey){
+      const response = await fetch("https://integrate.api.nvidia.com/v1/chat/completions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": "Bearer " + nvidiaKey },
+        body: JSON.stringify({
+          model: "meta/llama-4-maverick-17b-128e-instruct", max_tokens: 500,
+          messages: [{ role: "user", content: [
+            { type: "text", text: prompt + '\n\nفقط JSON خام برگردون، بدون ```.' },
+            { type: "image_url", image_url: { url: "data:" + window._locFormPhotoMedia + ";base64," + window._locFormPhotoBase64 } }
+          ]}]
+        })
+      });
+      if(!response.ok) throw new Error('nvidia-' + response.status);
+      const data = await response.json();
+      let raw = (data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) || '';
+      raw = raw.replace(/```json|```/g, '').trim();
+      parsed = JSON.parse(raw);
     } else {
       const response = await fetch("https://api.anthropic.com/v1/messages", {
         method: "POST",
@@ -1233,6 +1257,7 @@ function openSettings(){
   const root = document.getElementById('modalRoot');
   const key = getApiKey();
   const gkey = getGeminiKey();
+  const nkey = getNvidiaKey();
   const usage = getUsageStats();
   root.innerHTML = `
   <div class="overlay">
@@ -1253,6 +1278,18 @@ function openSettings(){
       </div>
       <div class="save-bar">
         <button class="save" onclick="saveGeminiKeyFromSettings()">ذخیره کلید Gemini</button>
+      </div>
+
+      <label style="margin-top:16px;">کلید API نویدیا NVIDIA NIM (رایگان، جایگزین دوم)</label>
+      <input type="text" id="nvidiaKeyInput" placeholder="nvapi-..." value="${escapeHtml(nkey)}" style="direction:ltr;text-align:left;">
+      <div class="order-note" style="margin-top:8px;line-height:1.8;">
+        اگه Gemini جواب نداد (محدودیت یا خطا)، خودکار سراغ این یکی می‌ره — رایگان و بدون کارت بانکی. برای ساختن کلید:
+        ۱. برو به build.nvidia.com و با یه ایمیل ثبت‌نام کن.
+        ۲. توی تنظیمات حساب، بخش API Key رو پیدا کن و یه کلید جدید بساز.
+        محدودیت نرخش (۴۰ درخواست در دقیقه) برای استفاده‌ی روزمره کافیه.
+      </div>
+      <div class="save-bar">
+        <button class="save" onclick="saveNvidiaKeyFromSettings()">ذخیره کلید NVIDIA</button>
       </div>
 
       <div class="section-label" style="margin-top:22px;"><span>حافظه‌ی ذخیره‌سازی</span></div>
@@ -1322,6 +1359,12 @@ function saveGeminiKeyFromSettings(){
   const val = document.getElementById('geminiKeyInput').value.trim();
   setGeminiKey(val);
   toast(val ? 'کلید Gemini ذخیره شد' : 'کلید Gemini پاک شد');
+}
+
+function saveNvidiaKeyFromSettings(){
+  const val = document.getElementById('nvidiaKeyInput').value.trim();
+  setNvidiaKey(val);
+  toast(val ? 'کلید NVIDIA ذخیره شد' : 'کلید NVIDIA پاک شد');
 }
 
 function resetUsageStatsFromSettings(){
@@ -2338,8 +2381,8 @@ function openOrderModal(existing){
         </div>
         <input type="file" id="galleryInput" class="hidden-file-input" accept="image/*" onchange="onPhotoSelected(event)">
         <div class="ai-status" id="aiStatus"></div>
-        ${getGeminiKey() ? `<button id="retryGeminiBtn" class="mini-btn" disabled onclick="runGeminiExtract()" style="margin-top:4px;">🔄 تلاش دوباره برای خواندن (اگه اینترنت قطع/وصل شد)</button>` : ''}
-        ${getGeminiKey() ? '' : `<div class="order-note" style="margin-top:8px;">دقت‌ت رو با یه کلید رایگان Gemini بالا ببر. <span style="text-decoration:underline;cursor:pointer;color:var(--amber);" onclick="openSettings()">فعال کردن Gemini (رایگان)</span></div>`}
+        ${(getGeminiKey() || getNvidiaKey()) ? `<button id="retryGeminiBtn" class="mini-btn" disabled onclick="runAutoExtract()" style="margin-top:4px;">🔄 تلاش دوباره برای خواندن (اگه اینترنت قطع/وصل شد)</button>` : ''}
+        ${(getGeminiKey() || getNvidiaKey()) ? '' : `<div class="order-note" style="margin-top:8px;">دقت‌ت رو با یه کلید رایگان Gemini یا NVIDIA بالا ببر. <span style="text-decoration:underline;cursor:pointer;color:var(--amber);" onclick="openSettings()">فعال کردن (رایگان)</span></div>`}
       </div>
 
       <label>نام مشتری</label>
@@ -2508,9 +2551,7 @@ async function loadPhotoFromBlob(blob){
     updateSaveButtonState();
     decodeQrFromImage(finalDataUrl);
     showDuplicateWarning(findDuplicateOrder());
-    if(getGeminiKey()){
-      runGeminiExtract();
-    }
+    runAutoExtract();
   };
   reader.readAsDataURL(blob);
 }
@@ -2739,6 +2780,18 @@ const GEMINI_SCHEMA = {
   }
 };
 
+async function runAutoExtract(){
+  if(!capturedImageBase64) return;
+  if(getGeminiKey()){
+    const ok = await runGeminiExtract();
+    if(ok) return;
+  }
+  if(getNvidiaKey()){
+    const ok = await runNvidiaExtract();
+    if(ok) return;
+  }
+}
+
 async function runGeminiExtract(){
   if(!capturedImageBase64) return;
   const statusEl = document.getElementById('aiStatus');
@@ -2788,7 +2841,7 @@ async function runGeminiExtract(){
       }
       if(btn) btn.disabled = false;
       fillAddressPlaceholderFromQr();
-      return;
+      return false;
     }
 
     const data = await response.json();
@@ -2804,11 +2857,77 @@ async function runGeminiExtract(){
     } else {
       updateSaveButtonState();
     }
+    if(btn) btn.disabled = false;
+    return ok;
   }catch(e){
     statusEl.textContent = '⚠ خواندن جزئیات سفارش با خطا مواجه شد (اینترنت رو چک کن) — دکمه‌ی «تلاش دوباره» رو بزن یا دستی وارد کن. توجه: اگه لینک نقشه بالا سبز شده، اون جدا و درست ثبت شده.';
     fillAddressPlaceholderFromQr();
+    if(btn) btn.disabled = false;
+    return false;
   }
-  if(btn) btn.disabled = false;
+}
+
+async function runNvidiaExtract(){
+  if(!capturedImageBase64) return;
+  const statusEl = document.getElementById('aiStatus');
+  const apiKey = getNvidiaKey();
+  if(!apiKey){
+    statusEl.innerHTML = '⚠ اول یه کلید NVIDIA توی «تنظیمات» ذخیره کن.';
+    return;
+  }
+
+  statusEl.textContent = 'در حال خواندن با NVIDIA (رایگان)...';
+
+  try{
+    const response = await fetch("https://integrate.api.nvidia.com/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer " + apiKey
+      },
+      body: JSON.stringify({
+        model: "meta/llama-4-maverick-17b-128e-instruct",
+        max_tokens: 1000,
+        messages: [{
+          role: "user",
+          content: [
+            { type: "text", text: buildReceiptPrompt() + '\n\nفقط یک شیء JSON خام برگردون، بدون توضیح اضافه و بدون ```.' },
+            { type: "image_url", image_url: { url: "data:" + capturedImageMedia + ";base64," + capturedImageBase64 } }
+          ]
+        }]
+      })
+    });
+
+    if(!response.ok){
+      if(response.status === 401){
+        statusEl.innerHTML = '⚠ کلید NVIDIA نامعتبره، توی تنظیمات چکش کن.';
+      } else if(response.status === 429){
+        statusEl.textContent = 'محدودیت NVIDIA پر شده، چند لحظه صبر کن یا دستی وارد کن.';
+      } else {
+        statusEl.textContent = 'خطا در سرور NVIDIA (' + response.status + ')، دستی وارد کن.';
+      }
+      fillAddressPlaceholderFromQr();
+      return false;
+    }
+
+    const data = await response.json();
+    let raw = (data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) || '';
+    raw = raw.replace(/```json|```/g, '').trim();
+    const parsed = JSON.parse(raw);
+    const ok = applyExtractedFields(parsed);
+    statusEl.textContent = ok ? 'خونده شد (NVIDIA، رایگان) — بررسی کن.' : '⚠ این عکس فیش سفارش به نظر نمی‌رسه — عکس دیگه‌ای امتحان کن یا دستی وارد کن.';
+    if(ok){
+      fillAddressPlaceholderFromQr();
+      showReadConfirmDialog();
+    } else {
+      updateSaveButtonState();
+    }
+    return ok;
+  }catch(e){
+    statusEl.textContent = '⚠ خواندن با NVIDIA با خطا مواجه شد (اینترنت رو چک کن) — دکمه‌ی «تلاش دوباره» رو بزن یا دستی وارد کن.';
+    fillAddressPlaceholderFromQr();
+    return false;
+  }
 }
 
 async function runAiExtract(){
