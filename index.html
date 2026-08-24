@@ -116,7 +116,7 @@ textarea{min-height:64px;resize:vertical;}
 .chip{flex:1;min-width:80px;text-align:center;padding:11px 6px;border-radius:10px;border:1px solid var(--line);background:var(--card);font-size:12px;font-family:inherit;color:var(--text);}
 .chip.active{border-color:var(--amber);background:rgba(227,168,87,.15);color:var(--amber);font-weight:700;}
 
-.photo-zone{border:1.5px dashed var(--line);border-radius:10px;padding:8px;text-align:center;margin-top:6px;}
+.photo-zone{border:1.5px dashed var(--line);border-radius:9px;padding:5px;text-align:center;margin-top:6px;}
 .photo-zone img{max-width:100%;max-height:140px;border-radius:8px;margin-bottom:8px;}
 .photo-btns{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;}
 .photo-btns button{background:var(--card2);border:1px solid var(--line);color:var(--text);padding:6px 10px;border-radius:8px;font-size:11.5px;font-family:inherit;}
@@ -221,7 +221,7 @@ textarea{min-height:64px;resize:vertical;}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script>
-const APP_VERSION = 'v11.8 · 2026-08-17';
+const APP_VERSION = 'v12.0 · 2026-08-17';
 const STORAGE_KEY_PREFIX = 'orders:';
 const EXPENSE_KEY_PREFIX = 'expenses:';
 const EXPENSE_CATEGORIES = ['بنزین', 'خرید فروشگاهی', 'سایر'];
@@ -255,6 +255,108 @@ const localStore = {
     return { keys };
   }
 };
+
+const IDB_NAME = 'peyk_sushinn_db';
+const IDB_STORE_NAME = 'kv';
+let _idbPromise = null;
+
+function openIdb(){
+  if(_idbPromise) return _idbPromise;
+  _idbPromise = new Promise((resolve, reject) => {
+    if(!('indexedDB' in window)){ reject(new Error('no-indexeddb')); return; }
+    const req = indexedDB.open(IDB_NAME, 1);
+    req.onupgradeneeded = (e) => {
+      const db = e.target.result;
+      if(!db.objectStoreNames.contains(IDB_STORE_NAME)){
+        db.createObjectStore(IDB_STORE_NAME, { keyPath: 'key' });
+      }
+    };
+    req.onsuccess = (e) => resolve(e.target.result);
+    req.onerror = (e) => reject(e.target.error || new Error('idb-open-failed'));
+  });
+  return _idbPromise;
+}
+
+const idbStore = {
+  async get(key){
+    try{
+      const db = await openIdb();
+      return await new Promise((resolve, reject) => {
+        const tx = db.transaction(IDB_STORE_NAME, 'readonly');
+        const req = tx.objectStore(IDB_STORE_NAME).get(key);
+        req.onsuccess = () => resolve(req.result ? { key, value: req.result.value } : null);
+        req.onerror = () => reject(req.error);
+      });
+    }catch(e){
+      return localStore.get(key);
+    }
+  },
+  async set(key, value){
+    try{
+      const db = await openIdb();
+      return await new Promise((resolve, reject) => {
+        const tx = db.transaction(IDB_STORE_NAME, 'readwrite');
+        const req = tx.objectStore(IDB_STORE_NAME).put({ key, value });
+        req.onsuccess = () => resolve({ key, value });
+        req.onerror = () => reject(req.error);
+      });
+    }catch(e){
+      return localStore.set(key, value);
+    }
+  },
+  async list(prefix){
+    try{
+      const db = await openIdb();
+      return await new Promise((resolve, reject) => {
+        const tx = db.transaction(IDB_STORE_NAME, 'readonly');
+        const req = tx.objectStore(IDB_STORE_NAME).getAllKeys();
+        req.onsuccess = () => {
+          const keys = req.result.filter(k => !prefix || String(k).indexOf(prefix) === 0);
+          resolve({ keys });
+        };
+        req.onerror = () => reject(req.error);
+      });
+    }catch(e){
+      return localStore.list(prefix);
+    }
+  },
+  async delete(key){
+    try{
+      const db = await openIdb();
+      return await new Promise((resolve, reject) => {
+        const tx = db.transaction(IDB_STORE_NAME, 'readwrite');
+        const req = tx.objectStore(IDB_STORE_NAME).delete(key);
+        req.onsuccess = () => resolve(true);
+        req.onerror = () => reject(req.error);
+      });
+    }catch(e){
+      try{ localStorage.removeItem(key); }catch(e2){}
+      return true;
+    }
+  }
+};
+
+async function migrateOrdersToIndexedDb(){
+  const flagKey = 'idb_migration_done_v1';
+  if(localStorage.getItem(flagKey)) return;
+  try{
+    const keysToMove = [];
+    for(let i=0;i<localStorage.length;i++){
+      const k = localStorage.key(i);
+      if(k && k.indexOf(STORAGE_KEY_PREFIX) === 0) keysToMove.push(k);
+    }
+    for(const k of keysToMove){
+      const v = localStorage.getItem(k);
+      if(v != null){
+        await idbStore.set(k, v);
+        localStorage.removeItem(k);
+      }
+    }
+    localStorage.setItem(flagKey, '1');
+  }catch(e){
+    console.error('IndexedDB migration failed, staying on localStorage:', e);
+  }
+}
 
 let todayKey = () => {
   const d = new Date();
@@ -1208,19 +1310,28 @@ function applyPickedLocation(id){
   toast('لوکیشن اعمال شد');
 }
 
-function updateStorageUsageNote(){
+async function updateStorageUsageNote(){
   const el = document.getElementById('storageUsageNote');
   if(!el) return;
-  let totalBytes = 0;
+  let localBytes = 0;
   try{
     for(let i=0;i<localStorage.length;i++){
       const k = localStorage.key(i);
       const v = localStorage.getItem(k) || '';
-      totalBytes += (k.length + v.length) * 2;
+      localBytes += (k.length + v.length) * 2;
     }
   }catch(e){}
-  const mb = (totalBytes / (1024*1024)).toFixed(1);
-  el.textContent = 'در حال حاضر حدود ' + mb + ' مگابایت از حافظه‌ی مرورگر استفاده شده.';
+  let idbBytes = 0;
+  try{
+    const listRes = await idbStore.list(STORAGE_KEY_PREFIX);
+    const keys = (listRes && listRes.keys) ? listRes.keys : [];
+    for(const k of keys){
+      const r = await idbStore.get(k);
+      if(r) idbBytes += (k.length + r.value.length) * 2;
+    }
+  }catch(e){}
+  const mb = ((localBytes + idbBytes) / (1024*1024)).toFixed(1);
+  el.textContent = 'در حال حاضر حدود ' + mb + ' مگابایت استفاده شده (سفارش‌ها روی حافظه‌ی پرظرفیت IndexedDB ذخیره می‌شن، پس جای نگرانی نیست).';
 }
 
 function confirmCleanupOldPhotos(){
@@ -1242,12 +1353,12 @@ async function cleanupOldPhotos(){
   const today = todayKey();
   let cleanedDays = 0;
   try{
-    const listRes = await localStore.list(STORAGE_KEY_PREFIX);
+    const listRes = await idbStore.list(STORAGE_KEY_PREFIX);
     const keys = (listRes && listRes.keys) || [];
     for(const key of keys){
       if(key === today) continue;
       try{
-        const r = await localStore.get(key);
+        const r = await idbStore.get(key);
         if(!r) continue;
         const orders = JSON.parse(r.value);
         let changed = false;
@@ -1258,7 +1369,7 @@ async function cleanupOldPhotos(){
           });
         });
         if(changed){
-          localStorage.setItem(key, JSON.stringify(orders));
+          await idbStore.set(key, JSON.stringify(orders));
           cleanedDays++;
         }
       }catch(e){}
@@ -1388,13 +1499,15 @@ function resetUsageStatsFromSettings(){
   openSettings();
 }
 
-function buildBackupData(){
+async function buildBackupData(){
   const data = { exportedAt: new Date().toISOString(), version: APP_VERSION, orders: {}, savedLocations: [], usageStats: null };
-  for(let i=0;i<localStorage.length;i++){
-    const k = localStorage.key(i);
-    if(k && k.indexOf(STORAGE_KEY_PREFIX) === 0){
-      try{ data.orders[k] = JSON.parse(localStorage.getItem(k)); }catch(e){}
-    }
+  const listRes = await idbStore.list(STORAGE_KEY_PREFIX);
+  const keys = (listRes && listRes.keys) ? listRes.keys : [];
+  for(const k of keys){
+    try{
+      const r = await idbStore.get(k);
+      if(r) data.orders[k] = JSON.parse(r.value);
+    }catch(e){}
   }
   data.savedLocations = getSavedLocations();
   data.usageStats = getUsageStats();
@@ -1402,21 +1515,22 @@ function buildBackupData(){
 }
 
 function exportAllDataJson(){
-  const data = buildBackupData();
-  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = 'peyk-backup-' + new Date().toISOString().slice(0,10) + '.json';
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 5000);
-  toast('فایل پشتیبان دانلود شد');
+  buildBackupData().then(data => {
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'peyk-backup-' + new Date().toISOString().slice(0,10) + '.json';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+    toast('فایل پشتیبان دانلود شد');
+  });
 }
 
 async function shareBackupToDrive(){
-  const data = buildBackupData();
+  const data = await buildBackupData();
   const json = JSON.stringify(data, null, 2);
   const fileName = 'peyk-backup-' + new Date().toISOString().slice(0,10) + '.json';
   const file = new File([json], fileName, { type: 'application/json' });
@@ -1442,17 +1556,17 @@ function importAllDataJson(evt){
   const file = evt.target.files[0];
   if(!file) return;
   const reader = new FileReader();
-  reader.onload = () => {
+  reader.onload = async () => {
     try{
       const data = JSON.parse(reader.result);
       let orderDaysCount = 0;
       if(data.orders){
-        Object.keys(data.orders).forEach(k => {
+        for(const k of Object.keys(data.orders)){
           if(k.indexOf(STORAGE_KEY_PREFIX) === 0){
-            localStorage.setItem(k, JSON.stringify(data.orders[k]));
+            await idbStore.set(k, JSON.stringify(data.orders[k]));
             orderDaysCount++;
           }
-        });
+        }
       }
       if(data.savedLocations){
         const existing = getSavedLocations();
@@ -1725,8 +1839,9 @@ function toast(msg, longDuration){
 }
 
 async function loadOrders(){
+  await migrateOrdersToIndexedDb();
   try{
-    const res = await localStore.get(todayKey());
+    const res = await idbStore.get(todayKey());
     currentOrders = res ? JSON.parse(res.value) : [];
   }catch(e){
     currentOrders = [];
@@ -1736,7 +1851,7 @@ async function loadOrders(){
 
 async function saveOrders(){
   try{
-    await localStore.set(todayKey(), JSON.stringify(currentOrders));
+    await idbStore.set(todayKey(), JSON.stringify(currentOrders));
   }catch(e){
     try{
       const stripped = currentOrders.map(o => {
@@ -1753,7 +1868,7 @@ async function saveOrders(){
         }
         return copy;
       });
-      await localStore.set(todayKey(), JSON.stringify(stripped));
+      await idbStore.set(todayKey(), JSON.stringify(stripped));
       toast('⚠ حافظه‌ی گوشی پره — عکس‌ها این‌بار ذخیره نشدن، ولی مبلغ/آدرس/همه‌چیز دیگه ذخیره شد. لطفاً از «تاریخچه» چندتا روز قدیمی رو حذف کن تا جا باز شه.', true);
     }catch(e2){
       toast('⚠ خطای جدی در ذخیره‌سازی: ' + (e2 && e2.message ? e2.message : e2), true);
@@ -1781,11 +1896,11 @@ async function findMatchingHistoryEntries(name, phone, address){
 
   const candidates = [];
   try{
-    const listRes = await localStore.list(STORAGE_KEY_PREFIX);
+    const listRes = await idbStore.list(STORAGE_KEY_PREFIX);
     const keys = listRes && listRes.keys ? listRes.keys : [];
     for(const k of keys){
       try{
-        const r = await localStore.get(k);
+        const r = await idbStore.get(k);
         const orders = r ? JSON.parse(r.value) : [];
         orders.forEach(o => {
           if(!(o.address || '').trim()) return;
@@ -3554,9 +3669,11 @@ function renderPaymentSections(){
       <div style="font-size:15px;font-weight:700;color:var(--text);font-family:inherit;">کارت</div>
       ${d.cards.map((c,i) => `
         <div style="${i>0?'border-top:1px dashed var(--line);margin-top:10px;padding-top:10px;':''}">
-          <div style="text-align:left;"><button class="danger" style="padding:2px 10px;" onclick="removeCardEntry(${i})">حذف این کارت</button></div>
-          <label>مبلغ کارت ${i+1}</label>
-          <input type="text" inputmode="numeric" class="card-amount" data-idx="${i}" value="${c.amountTL!=null?c.amountTL:''}" oninput="updatePaymentBalanceIndicator()">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
+            <div style="font-size:13px;font-weight:700;color:var(--text);font-family:inherit;white-space:nowrap;">مبلغ کارت ${i+1}</div>
+            <input type="text" inputmode="numeric" class="card-amount" data-idx="${i}" value="${c.amountTL!=null?c.amountTL:''}" oninput="updatePaymentBalanceIndicator()" style="margin:0;width:130px;flex-shrink:0;">
+          </div>
+          <div style="text-align:left;margin-top:6px;"><button class="danger" style="padding:2px 10px;" onclick="removeCardEntry(${i})">حذف این کارت</button></div>
           ${photoBlockHtml('card_'+i, c, getGeminiKey() ? 'عکس فیش پوز (خودکار خونده می‌شه)' : 'عکس فیش پوز')}
         </div>
       `).join('')}
@@ -4089,7 +4206,7 @@ async function openHistory(){
   </div>`;
 
   try{
-    const listRes = await localStore.list(STORAGE_KEY_PREFIX);
+    const listRes = await idbStore.list(STORAGE_KEY_PREFIX);
     const keys = (listRes && listRes.keys) ? keys_sort(listRes.keys) : [];
     if(keys.length === 0){
       document.getElementById('historyList').innerHTML = '<div class="empty">هنوز روزی ثبت نشده.</div>';
@@ -4097,7 +4214,7 @@ async function openHistory(){
     }
     const items = await Promise.all(keys.map(async k => {
       try{
-        const r = await localStore.get(k);
+        const r = await idbStore.get(k);
         const orders = r ? JSON.parse(r.value) : [];
         let total = 0;
         orders.filter(o=>o.status==='delivered').forEach(o => {
@@ -4185,7 +4302,7 @@ function confirmDeleteHistoryDay(key){
 }
 
 async function deleteHistoryDay(key){
-  localStorage.removeItem(key);
+  await idbStore.delete(key);
   window._historyCache = (window._historyCache || []).filter(it => it.key !== key);
   closeModal();
   if(key === todayKey()){
@@ -4225,10 +4342,10 @@ function confirmDeleteSelectedHistoryDays(){
 async function deleteSelectedHistoryDays(){
   const keys = Array.from(window._historySelectedKeys || []);
   let touchedToday = false;
-  keys.forEach(key => {
-    localStorage.removeItem(key);
+  for(const key of keys){
+    await idbStore.delete(key);
     if(key === todayKey()) touchedToday = true;
-  });
+  }
   window._historyCache = (window._historyCache || []).filter(it => !window._historySelectedKeys.has(it.key));
   window._historySelectedKeys = new Set();
   closeModal();
