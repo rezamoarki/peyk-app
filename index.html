@@ -110,6 +110,7 @@ header.top{position:sticky;top:0;z-index:20;background:var(--bg);border-bottom:1
 
 label{display:block;font-size:12px;color:var(--muted);margin:12px 0 5px;}
 input[type=text],input[type=tel],input[type=date],input[type=number],textarea,select{width:100%;background:var(--card);border:1px solid var(--line);color:var(--text);border-radius:10px;padding:11px 12px;font-size:14px;font-family:inherit;}
+.amount-input{border:2px solid var(--amber);font-weight:700;}
 textarea{min-height:64px;resize:vertical;}
 .two-col{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
 .chip-group{display:flex;gap:8px;flex-wrap:wrap;}
@@ -221,7 +222,7 @@ textarea{min-height:64px;resize:vertical;}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script>
-const APP_VERSION = 'v12.0 · 2026-08-17';
+const APP_VERSION = 'v12.2 · 2026-08-17';
 const STORAGE_KEY_PREFIX = 'orders:';
 const EXPENSE_KEY_PREFIX = 'expenses:';
 const EXPENSE_CATEGORIES = ['بنزین', 'خرید فروشگاهی', 'سایر'];
@@ -2965,7 +2966,7 @@ async function runGeminiExtract(){
           responseSchema: GEMINI_SCHEMA
         }
       })
-    }, 8000);
+    }, 12000);
 
     if(!response.ok){
       if(response.status === 401 || response.status === 403){
@@ -3038,7 +3039,7 @@ async function runNvidiaExtract(){
           ]
         }]
       })
-    }, 8000);
+    }, 12000);
 
     if(!response.ok){
       if(response.status === 401){
@@ -3642,17 +3643,18 @@ function renderPaymentSections(){
   html += `
   <div class="order" style="background:var(--card);color:var(--text);border:1px solid var(--line);">
     <div class="order-body" style="padding:10px 12px;">
-      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-top:0;font-size:15px;font-weight:600;">
-        <input type="checkbox" id="pay_online_used" ${d.online.used ? 'checked' : ''} onchange="togglePayOnline()" style="width:18px;height:18px;">
-        <span>پرداخت آنلاین</span>
-      </label>
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-top:0;font-size:15px;font-weight:600;">
+          <input type="checkbox" id="pay_online_used" ${d.online.used ? 'checked' : ''} onchange="togglePayOnline()" style="width:18px;height:18px;">
+          <span>پرداخت آنلاین</span>
+        </label>
+        ${d.online.used ? `<input type="text" inputmode="numeric" class="amount-input" id="pay_online_amount" value="${(d.online.amountTL!=null && d.online.amountTL!=='') ? d.online.amountTL : (o.amount||'')}" oninput="updatePaymentBalanceIndicator()" style="margin:0;width:130px;flex-shrink:0;">` : ''}
+      </div>
       ${d.online.used ? `
-        <label>مبلغی که آنلاین پرداخت شده (لیر)</label>
-        <input type="text" inputmode="numeric" id="pay_online_amount" value="${(d.online.amountTL!=null && d.online.amountTL!=='') ? d.online.amountTL : (o.amount||'')}" oninput="updatePaymentBalanceIndicator()">
         <div class="order-note-dark">اگه فقط بخشی از سفارش آنلاین پرداخت شده، همین مبلغ رو اصلاح کن و بقیه رو توی بخش‌های پایین‌تر (نقد/کارت/واریز) ثبت کن.</div>
-        <label>یادداشت (اختیاری)</label>
-        <textarea id="pay_online_note">${escapeHtml(d.online.note||'')}</textarea>
         ${photoBlockHtml('online', d.online, 'عکس فیش/تاییدیه (اختیاری)')}
+        <label>یادداشت (اختیاری)</label>
+        <textarea id="pay_online_note" style="min-height:36px;">${escapeHtml(d.online.note||'')}</textarea>
       ` : ''}
     </div>
   </div>
@@ -3662,7 +3664,7 @@ function renderPaymentSections(){
       ${d.cards.length === 1 ? `
       <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
         <div style="font-size:15px;font-weight:700;color:var(--text);font-family:inherit;white-space:nowrap;">کارت</div>
-        <input type="text" inputmode="numeric" class="card-amount" data-idx="0" value="${d.cards[0].amountTL!=null?d.cards[0].amountTL:''}" oninput="updatePaymentBalanceIndicator()" style="margin:0;width:130px;flex-shrink:0;">
+        <input type="text" inputmode="numeric" class="card-amount amount-input" data-idx="0" value="${d.cards[0].amountTL!=null?d.cards[0].amountTL:''}" oninput="updatePaymentBalanceIndicator()" style="margin:0;width:130px;flex-shrink:0;">
       </div>
       ${photoBlockHtml('card_0', d.cards[0], getGeminiKey() ? 'عکس فیش پوز (خودکار خونده می‌شه)' : 'عکس فیش پوز')}
       ` : `
@@ -3671,7 +3673,7 @@ function renderPaymentSections(){
         <div style="${i>0?'border-top:1px dashed var(--line);margin-top:10px;padding-top:10px;':''}">
           <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
             <div style="font-size:13px;font-weight:700;color:var(--text);font-family:inherit;white-space:nowrap;">مبلغ کارت ${i+1}</div>
-            <input type="text" inputmode="numeric" class="card-amount" data-idx="${i}" value="${c.amountTL!=null?c.amountTL:''}" oninput="updatePaymentBalanceIndicator()" style="margin:0;width:130px;flex-shrink:0;">
+            <input type="text" inputmode="numeric" class="card-amount amount-input" data-idx="${i}" value="${c.amountTL!=null?c.amountTL:''}" oninput="updatePaymentBalanceIndicator()" style="margin:0;width:130px;flex-shrink:0;">
           </div>
           <div style="text-align:left;margin-top:6px;"><button class="danger" style="padding:2px 10px;" onclick="removeCardEntry(${i})">حذف این کارت</button></div>
           ${photoBlockHtml('card_'+i, c, getGeminiKey() ? 'عکس فیش پوز (خودکار خونده می‌شه)' : 'عکس فیش پوز')}
@@ -3686,7 +3688,7 @@ function renderPaymentSections(){
     <div class="order-body">
       <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
         <div style="font-size:15px;font-weight:700;color:var(--text);font-family:inherit;white-space:nowrap;">نقد</div>
-        <input type="text" inputmode="numeric" id="pay_cash_tl" value="${d.cashTL!=null?d.cashTL:''}" oninput="updatePaymentBalanceIndicator()" style="margin:0;width:130px;flex-shrink:0;">
+        <input type="text" inputmode="numeric" class="amount-input" id="pay_cash_tl" value="${d.cashTL!=null?d.cashTL:''}" oninput="updatePaymentBalanceIndicator()" style="margin:0;width:130px;flex-shrink:0;">
       </div>
 
       <div style="border-top:1px dashed var(--line);margin-top:10px;padding-top:10px;">
@@ -3723,7 +3725,7 @@ function renderPaymentSections(){
     <div class="order-body">
       <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
         <div style="font-size:15px;font-weight:700;color:var(--text);font-family:inherit;white-space:nowrap;">واریز به حساب</div>
-        <input type="text" inputmode="numeric" id="pay_transfer_tl" value="${d.transfer.amountTL!=null?d.transfer.amountTL:''}" oninput="updatePaymentBalanceIndicator()" style="margin:0;width:130px;flex-shrink:0;">
+        <input type="text" inputmode="numeric" class="amount-input" id="pay_transfer_tl" value="${d.transfer.amountTL!=null?d.transfer.amountTL:''}" oninput="updatePaymentBalanceIndicator()" style="margin:0;width:130px;flex-shrink:0;">
       </div>
       ${photoBlockHtml('transfer', d.transfer, 'عکس فیش واریز (اختیاری)')}
       <label>یادداشت (اختیاری)</label>
