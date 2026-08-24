@@ -116,10 +116,10 @@ textarea{min-height:64px;resize:vertical;}
 .chip{flex:1;min-width:80px;text-align:center;padding:11px 6px;border-radius:10px;border:1px solid var(--line);background:var(--card);font-size:12px;font-family:inherit;color:var(--text);}
 .chip.active{border-color:var(--amber);background:rgba(227,168,87,.15);color:var(--amber);font-weight:700;}
 
-.photo-zone{border:1.5px dashed var(--line);border-radius:12px;padding:16px;text-align:center;margin-top:6px;}
-.photo-zone img{max-width:100%;max-height:220px;border-radius:8px;margin-bottom:8px;}
+.photo-zone{border:1.5px dashed var(--line);border-radius:10px;padding:8px;text-align:center;margin-top:6px;}
+.photo-zone img{max-width:100%;max-height:140px;border-radius:8px;margin-bottom:8px;}
 .photo-btns{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;}
-.photo-btns button{background:var(--card2);border:1px solid var(--line);color:var(--text);padding:9px 12px;border-radius:9px;font-size:12px;font-family:inherit;}
+.photo-btns button{background:var(--card2);border:1px solid var(--line);color:var(--text);padding:6px 10px;border-radius:8px;font-size:11.5px;font-family:inherit;}
 .photo-btns button.ai{background:var(--amber);color:var(--amber-ink);border:none;font-weight:700;}
 .photo-btns button:disabled{opacity:.5;}
 .hidden-file-input{display:none;}
@@ -221,7 +221,7 @@ textarea{min-height:64px;resize:vertical;}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script>
-const APP_VERSION = 'v11.7 · 2026-08-17';
+const APP_VERSION = 'v11.8 · 2026-08-17';
 const STORAGE_KEY_PREFIX = 'orders:';
 const EXPENSE_KEY_PREFIX = 'expenses:';
 const EXPENSE_CATEGORIES = ['بنزین', 'خرید فروشگاهی', 'سایر'];
@@ -3544,23 +3544,33 @@ function renderPaymentSections(){
 
   <div class="order" style="background:var(--card);color:var(--text);border:1px solid var(--line);">
     <div class="order-body">
+      ${d.cards.length === 1 ? `
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
+        <div style="font-size:15px;font-weight:700;color:var(--text);font-family:inherit;white-space:nowrap;">کارت</div>
+        <input type="text" inputmode="numeric" class="card-amount" data-idx="0" value="${d.cards[0].amountTL!=null?d.cards[0].amountTL:''}" oninput="updatePaymentBalanceIndicator()" style="margin:0;width:130px;flex-shrink:0;">
+      </div>
+      ${photoBlockHtml('card_0', d.cards[0], getGeminiKey() ? 'عکس فیش پوز (خودکار خونده می‌شه)' : 'عکس فیش پوز')}
+      ` : `
       <div style="font-size:15px;font-weight:700;color:var(--text);font-family:inherit;">کارت</div>
       ${d.cards.map((c,i) => `
         <div style="${i>0?'border-top:1px dashed var(--line);margin-top:10px;padding-top:10px;':''}">
-          ${d.cards.length > 1 ? `<div style="text-align:left;"><button class="danger" style="padding:2px 10px;" onclick="removeCardEntry(${i})">حذف این کارت</button></div>` : ''}
-          ${d.cards.length > 1 ? `<label>مبلغ کارت ${i+1}</label>` : ''}
-          <input type="text" inputmode="numeric" class="card-amount" data-idx="${i}" value="${c.amountTL!=null?c.amountTL:''}" oninput="updatePaymentBalanceIndicator()" style="${d.cards.length > 1 ? '' : 'margin-top:8px;'}">
+          <div style="text-align:left;"><button class="danger" style="padding:2px 10px;" onclick="removeCardEntry(${i})">حذف این کارت</button></div>
+          <label>مبلغ کارت ${i+1}</label>
+          <input type="text" inputmode="numeric" class="card-amount" data-idx="${i}" value="${c.amountTL!=null?c.amountTL:''}" oninput="updatePaymentBalanceIndicator()">
           ${photoBlockHtml('card_'+i, c, getGeminiKey() ? 'عکس فیش پوز (خودکار خونده می‌شه)' : 'عکس فیش پوز')}
         </div>
       `).join('')}
+      `}
       <button type="button" class="mini-btn" style="margin-top:8px;width:100%;" onclick="addCardEntry()">+ افزودن کارت دیگر</button>
     </div>
   </div>
 
   <div class="order" style="background:var(--card);color:var(--text);border:1px solid var(--line);">
     <div class="order-body">
-      <div style="font-size:15px;font-weight:700;color:var(--text);font-family:inherit;">نقد</div>
-      <input type="text" inputmode="numeric" id="pay_cash_tl" value="${d.cashTL!=null?d.cashTL:''}" oninput="updatePaymentBalanceIndicator()" style="margin-top:8px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
+        <div style="font-size:15px;font-weight:700;color:var(--text);font-family:inherit;white-space:nowrap;">نقد</div>
+        <input type="text" inputmode="numeric" id="pay_cash_tl" value="${d.cashTL!=null?d.cashTL:''}" oninput="updatePaymentBalanceIndicator()" style="margin:0;width:130px;flex-shrink:0;">
+      </div>
 
       <div style="border-top:1px dashed var(--line);margin-top:10px;padding-top:10px;">
         <label>مبلغی که مشتری داد (برای محاسبه‌ی مانده)</label>
@@ -3594,8 +3604,10 @@ function renderPaymentSections(){
 
   <div class="order" style="background:var(--card);color:var(--text);border:1px solid var(--line);">
     <div class="order-body">
-      <div style="font-size:15px;font-weight:700;color:var(--text);font-family:inherit;">واریز به حساب</div>
-      <input type="text" inputmode="numeric" id="pay_transfer_tl" value="${d.transfer.amountTL!=null?d.transfer.amountTL:''}" oninput="updatePaymentBalanceIndicator()" style="margin-top:8px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
+        <div style="font-size:15px;font-weight:700;color:var(--text);font-family:inherit;white-space:nowrap;">واریز به حساب</div>
+        <input type="text" inputmode="numeric" id="pay_transfer_tl" value="${d.transfer.amountTL!=null?d.transfer.amountTL:''}" oninput="updatePaymentBalanceIndicator()" style="margin:0;width:130px;flex-shrink:0;">
+      </div>
       ${photoBlockHtml('transfer', d.transfer, 'عکس فیش واریز (اختیاری)')}
       <label>یادداشت (اختیاری)</label>
       <textarea id="pay_transfer_note">${escapeHtml(d.transfer.note||'')}</textarea>
