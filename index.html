@@ -92,6 +92,7 @@ header.top{position:sticky;top:0;z-index:20;background:var(--bg);border-bottom:1
 .order-actions button.danger{color:#9c3b34;border-color:#e5c6c2;}
 .order-actions button.primary-act{background:var(--amber);color:var(--amber-ink);font-weight:700;grid-column:1 / -1;padding:12px 4px;border:none;}
 .order-note{font-size:11.5px;color:#736c58;margin-top:6px;}
+.order-note-dark{font-size:11.5px;color:var(--muted);margin-top:6px;}
 
 .empty{text-align:center;color:var(--muted);font-size:13px;padding:30px 10px;border:1px dashed var(--line);border-radius:12px;}
 
@@ -220,7 +221,7 @@ textarea{min-height:64px;resize:vertical;}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script>
-const APP_VERSION = 'v11.2 · 2026-08-17';
+const APP_VERSION = 'v11.3 · 2026-08-17';
 const STORAGE_KEY_PREFIX = 'orders:';
 const EXPENSE_KEY_PREFIX = 'expenses:';
 const EXPENSE_CATEGORIES = ['بنزین', 'خرید فروشگاهی', 'سایر'];
@@ -3519,7 +3520,7 @@ function renderPaymentSections(){
       ${d.online.used ? `
         <label>مبلغی که آنلاین پرداخت شده (لیر)</label>
         <input type="text" inputmode="numeric" id="pay_online_amount" value="${(d.online.amountTL!=null && d.online.amountTL!=='') ? d.online.amountTL : (o.amount||'')}" oninput="updatePaymentBalanceIndicator()">
-        <div class="order-note">اگه فقط بخشی از سفارش آنلاین پرداخت شده، همین مبلغ رو اصلاح کن و بقیه رو توی بخش‌های پایین‌تر (نقد/کارت/واریز) ثبت کن.</div>
+        <div class="order-note-dark">اگه فقط بخشی از سفارش آنلاین پرداخت شده، همین مبلغ رو اصلاح کن و بقیه رو توی بخش‌های پایین‌تر (نقد/کارت/واریز) ثبت کن.</div>
         <label>یادداشت (اختیاری)</label>
         <textarea id="pay_online_note">${escapeHtml(d.online.note||'')}</textarea>
         ${photoBlockHtml('online', d.online, 'عکس فیش/تاییدیه (اختیاری)')}
@@ -3538,9 +3539,7 @@ function renderPaymentSections(){
           ${photoBlockHtml('card_'+i, c, getGeminiKey() ? 'عکس فیش پوز (خودکار خونده می‌شه)' : 'عکس فیش پوز')}
         </div>
       `).join('')}
-      <div class="save-bar" style="margin-top:8px;">
-        <button class="cancel" onclick="addCardEntry()">+ افزودن کارت دیگر</button>
-      </div>
+      <button type="button" class="mini-btn" style="margin-top:8px;width:100%;" onclick="addCardEntry()">+ افزودن کارت دیگر</button>
     </div>
   </div>
 
@@ -3552,7 +3551,7 @@ function renderPaymentSections(){
       <div style="border-top:1px dashed var(--line);margin-top:10px;padding-top:10px;">
         <label>مبلغی که مشتری داد (برای محاسبه‌ی مانده)</label>
         <input type="text" inputmode="numeric" id="cash_handed_over" oninput="calcCashChange()">
-        <div class="order-note" id="cashChangeStatus"></div>
+        <div class="order-note-dark" id="cashChangeStatus"></div>
       </div>
 
       ${d.forex.map((f,i) => `
@@ -3569,12 +3568,10 @@ function renderPaymentSections(){
             <input type="text" inputmode="decimal" class="forex-rate" data-idx="${i}" value="${f.rate!=null?f.rate:''}" style="flex:1;" oninput="updatePaymentBalanceIndicator()">
             <button type="button" onclick="fetchAndApplyRate(${i})" style="background:var(--card2);border:1px solid var(--line);color:var(--text);border-radius:8px;padding:0 12px;white-space:nowrap;">🔄 نرخ روز</button>
           </div>
-          <div class="order-note" id="forex_status_${i}">${f.rate ? ('معادل تقریبی: ' + fmt(Math.round((Number(f.amount)||0) * (Number(f.rate)||0))) + ' TL') : 'نرخ رو خودکار بگیر یا دستی بزن'}</div>
+          <div class="order-note-dark" id="forex_status_${i}">${f.rate ? ('معادل تقریبی: ' + fmt(Math.round((Number(f.amount)||0) * (Number(f.rate)||0))) + ' TL') : 'نرخ رو خودکار بگیر یا دستی بزن'}</div>
         </div>
       `).join('')}
-      <div class="save-bar" style="margin-top:8px;">
-        <button class="cancel" onclick="addForexEntry()">+ افزودن ارز دیگر</button>
-      </div>
+      <button type="button" class="mini-btn" style="margin-top:8px;width:100%;" onclick="addForexEntry()">+ افزودن ارز دیگر</button>
 
       <label style="margin-top:10px;">مبلغی که بابت باقی پس دادی</label>
       <input type="text" inputmode="numeric" id="pay_change_given" value="${d.changeGiven!=null?d.changeGiven:''}" oninput="updatePaymentBalanceIndicator()">
