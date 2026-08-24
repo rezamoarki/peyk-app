@@ -221,7 +221,7 @@ textarea{min-height:64px;resize:vertical;}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script>
-const APP_VERSION = 'v11.3 · 2026-08-17';
+const APP_VERSION = 'v11.7 · 2026-08-17';
 const STORAGE_KEY_PREFIX = 'orders:';
 const EXPENSE_KEY_PREFIX = 'expenses:';
 const EXPENSE_CATEGORIES = ['بنزین', 'خرید فروشگاهی', 'سایر'];
@@ -602,8 +602,8 @@ function seedCaesarResortBlocks(){
     if(existingIds.has(id)) return;
     toAdd.push({
       id: id,
-      name: 'F' + b.phase + ' - B' + b.n + ' - ' + b.name,
-      address: 'F' + b.phase + ' - B' + b.n + ' - ' + b.name,
+      name: b.name + ' -F' + b.phase + '-B' + b.n,
+      address: b.name + ' -F' + b.phase + '-B' + b.n,
       mapLink: null,
       group: 'شهرک سزار ریسورت (Caesar Resort)',
       subGroup: 'فاز ' + b.phase,
@@ -631,7 +631,7 @@ function migrateCaesarLocationGroups(){
           l.sortKey = block.n;
           changed = true;
         }
-        const compactFormat = 'F' + block.phase + ' - B' + block.n + ' - ' + block.name;
+        const compactFormat = block.name + ' -F' + block.phase + '-B' + block.n;
         if(l.name !== compactFormat){
           l.name = compactFormat;
           changed = true;
@@ -724,17 +724,19 @@ function openLocationsManager(){
 }
 
 function locationCardHtml(l){
-  const isCaesar = l.id && l.id.indexOf('loc_caesar_') === 0;
+  const showAddr = l.address && l.address.trim() && l.address.trim() !== l.name.trim();
   return `
     <div class="order">
-      <div class="order-body">
-        <div class="order-name">${escapeHtml(l.name)}</div>
-        ${isCaesar ? '' : `<div class="order-addr">${escapeHtml(l.address || '')}${l.mapLink ? ' <span style="color:var(--teal);">(لینک نقشه دارد)</span>' : ''}</div>`}
-        <div class="order-actions">
-          <button onclick="openMap(getNavQueryForAddress('${escapeJs(l.address||'')}', ${l.mapLink ? `'${escapeJs(l.mapLink)}'` : 'null'}))">نقشه</button>
-          <button onclick="openLocationForm('${l.id}')">ویرایش</button>
-          <button class="danger" onclick="confirmDeleteLocation('${l.id}')">حذف</button>
+      <div class="order-body" style="padding:9px 12px;">
+        <div dir="ltr" style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
+          <div class="order-name" style="margin:0;flex:1;overflow:hidden;">${escapeHtml(l.name)}</div>
+          <div style="display:flex;gap:5px;flex-shrink:0;">
+            <button title="نقشه" onclick="openMap(getNavQueryForAddress('${escapeJs(l.address||'')}', ${l.mapLink ? `'${escapeJs(l.mapLink)}'` : 'null'}))" style="background:rgba(0,0,0,.06);border:1px solid rgba(0,0,0,.14);border-radius:8px;padding:6px 9px;font-size:14px;">🗺️</button>
+            <button title="ویرایش" onclick="openLocationForm('${l.id}')" style="background:rgba(0,0,0,.06);border:1px solid rgba(0,0,0,.14);border-radius:8px;padding:6px 9px;font-size:14px;">✏️</button>
+            <button title="حذف" onclick="confirmDeleteLocation('${l.id}')" style="background:rgba(0,0,0,.06);border:1px solid rgba(0,0,0,.14);border-radius:8px;padding:6px 9px;font-size:14px;">🗑</button>
+          </div>
         </div>
+        ${showAddr ? `<div class="order-addr" dir="ltr" style="text-align:left;">${escapeHtml(l.address)}${l.mapLink ? ' <span style="color:var(--teal);">✓</span>' : ''}</div>` : ''}
       </div>
     </div>`;
 }
@@ -764,6 +766,10 @@ function renderLocationsList(){
       const sg = l.subGroup || 'سایر';
       if(!grouped[l.group][sg]) grouped[l.group][sg] = [];
       grouped[l.group][sg].push(l);
+    } else if(l.region){
+      if(!grouped[l.region]) grouped[l.region] = {};
+      if(!grouped[l.region]['سایر']) grouped[l.region]['سایر'] = [];
+      grouped[l.region]['سایر'].push(l);
     } else {
       ungrouped.push(l);
     }
@@ -783,13 +789,18 @@ function renderLocationsList(){
     });
     html += `<details class="loc-group"${hasSearch ? ' open' : ''}>
       <summary>${escapeHtml(groupName)} (${totalCount})</summary>`;
-    subGroupNames.forEach(sgName => {
-      const items = subGroups[sgName].slice().sort((a,b) => (a.sortKey||0) - (b.sortKey||0));
-      html += `<details class="loc-subgroup"${hasSearch ? ' open' : ''}>
-        <summary>${escapeHtml(sgName)} (${items.length})</summary>
-        ${items.map(locationCardHtml).join('')}
-      </details>`;
-    });
+    if(subGroupNames.length === 1 && subGroupNames[0] === 'سایر'){
+      const items = subGroups['سایر'].slice().sort((a,b) => (a.sortKey||0) - (b.sortKey||0));
+      html += items.map(locationCardHtml).join('');
+    } else {
+      subGroupNames.forEach(sgName => {
+        const items = subGroups[sgName].slice().sort((a,b) => (a.sortKey||0) - (b.sortKey||0));
+        html += `<details class="loc-subgroup"${hasSearch ? ' open' : ''}>
+          <summary>${escapeHtml(sgName)} (${items.length})</summary>
+          ${items.map(locationCardHtml).join('')}
+        </details>`;
+      });
+    }
     html += `</details>`;
   });
 
@@ -1167,14 +1178,17 @@ function renderLocationPickList(){
     wrap.innerHTML = '<div class="empty">لوکیشنی پیدا نشد.</div>';
     return;
   }
-  wrap.innerHTML = list.map(l => `
+  wrap.innerHTML = list.map(l => {
+    const showAddr = l.address && l.address.trim() && l.address.trim() !== l.name.trim();
+    return `
     <div class="order" style="cursor:pointer;" onclick='applyPickedLocation("${l.id}")'>
       <div class="order-body">
-        <div class="order-name">${escapeHtml(l.name)}</div>
-        ${l.id && l.id.indexOf('loc_caesar_') === 0 ? '' : `<div class="order-addr">${escapeHtml(l.address || '')}</div>`}
+        <div class="order-name" dir="ltr" style="text-align:left;">${escapeHtml(l.name)}</div>
+        ${showAddr ? `<div class="order-addr" dir="ltr" style="text-align:left;">${escapeHtml(l.address)}</div>` : ''}
       </div>
     </div>
-  `).join('');
+  `;
+  }).join('');
 }
 
 function applyPickedLocation(id){
