@@ -222,7 +222,7 @@ textarea{min-height:64px;resize:vertical;}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script>
-const APP_VERSION = 'v12.3 · 2026-08-17';
+const APP_VERSION = 'v12.5 · 2026-08-25';
 const STORAGE_KEY_PREFIX = 'orders:';
 const EXPENSE_KEY_PREFIX = 'expenses:';
 const EXPENSE_CATEGORIES = ['بنزین', 'خرید فروشگاهی', 'سایر'];
@@ -755,6 +755,56 @@ function seedCaesarResortBlocksFromSettings(){
   if(document.getElementById('locationsListWrap')) renderLocationsList();
 }
 
+const ROYAL_SUN_SECTIONS = [
+  {n:1, name:'River Apart 1'},
+  {n:2, name:'River Apart 2'},
+  {n:3, name:'River Apart 3'},
+  {n:4, name:'River Apart 4'},
+  {n:5, name:'River Apart 5'},
+  {n:6, name:'Wave Apart 1'},
+  {n:7, name:'Wave Apart 2'},
+  {n:8, name:'Wave Apart 3'},
+  {n:9, name:'Aqua Apart 1'},
+  {n:10, name:'Aqua Apart 2'},
+  {n:11, name:'Aqua Apart 3'},
+  {n:12, name:'Sandy Apart 1'},
+  {n:13, name:'Sandy Apart 2'},
+  {n:14, name:'Pearl Homes 1'},
+  {n:15, name:'Pearl Homes 2'},
+  {n:16, name:'Stream Homes'},
+  {n:17, name:'Potamic Apart 1'},
+  {n:18, name:'Potamic Apart 2'}
+];
+
+function seedRoyalSunSections(){
+  const existing = getSavedLocations();
+  const existingIds = new Set(existing.map(l => l.id));
+  let addedCount = 0;
+  const toAdd = [];
+  ROYAL_SUN_SECTIONS.forEach(s => {
+    const id = 'loc_royalsun_' + s.n;
+    if(existingIds.has(id)) return;
+    toAdd.push({
+      id: id,
+      name: s.name,
+      address: s.name + ' — واحد رو موقع رسیدن اضافه کن',
+      mapLink: null,
+      group: 'Royal Sun Residence',
+      region: 'Royal Sun Residence',
+      sortKey: s.n
+    });
+    addedCount++;
+  });
+  setSavedLocations(existing.concat(toAdd));
+  return addedCount;
+}
+
+function seedRoyalSunSectionsFromSettings(){
+  const count = seedRoyalSunSections();
+  toast(count > 0 ? count + ' بخش Royal Sun اضافه شد' : 'قبلاً اضافه شده بودن');
+  if(document.getElementById('locationsListWrap')) renderLocationsList();
+}
+
 function getApiKey(){
   return localStorage.getItem('anthropic_api_key') || '';
 }
@@ -816,6 +866,7 @@ function openLocationsManager(){
       </div>
       <div class="save-bar" style="margin-bottom:4px;">
         <button class="cancel" onclick="seedCaesarResortBlocksFromSettings()">🏛 بارگذاری بلاک‌های شهرک سزار (۸۳ تا)</button>
+        <button class="cancel" onclick="seedRoyalSunSectionsFromSettings()" style="margin-top:8px;">🏢 بارگذاری بخش‌های Royal Sun (۱۸ تا)</button>
       </div>
       <div class="save-bar" style="margin-bottom:4px;">
         <button class="cancel" onclick="exportLocationsKml()">📤 خروجی KML (برای Map Marker)</button>
@@ -2181,6 +2232,9 @@ function queueOrderCard(o, idx, total){
         <button onclick="editOrder('${o.id}')"><span class="ico">✏️</span>ویرایش</button>
         <button class="danger" onclick="cancelOrder('${o.id}')"><span class="ico">❌</span>کنسل شد</button>
         <button class="danger" onclick="deleteOrder('${o.id}')"><span class="ico">🗑</span>حذف</button>
+      </div>
+      <div class="order-actions">
+        <button class="primary-act" onclick="openDeliveryPayment('${o.id}')">تحویل شد · ثبت پرداخت</button>
       </div>
     </div>
   </div>`;
