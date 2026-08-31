@@ -222,10 +222,11 @@ textarea{min-height:64px;resize:vertical;}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script>
-const APP_VERSION = 'v12.7 · 2026-08-25';
+const APP_VERSION = 'v13.0 · 2026-08-31';
 const STORAGE_KEY_PREFIX = 'orders:';
 const EXPENSE_KEY_PREFIX = 'expenses:';
 const EXPENSE_CATEGORIES = ['بنزین', 'خرید فروشگاهی', 'سایر'];
+const EXPENSE_SOURCES = ['خودم', 'صندوق', 'مشتری‌ها'];
 const CURRENCIES = [
   { code:'GBP', label:'پوند (GBP)', symbol:'£' },
   { code:'EUR', label:'یورو (EUR)', symbol:'€' },
@@ -392,43 +393,90 @@ async function getTodayExpenses(){
 async function openExpensesManager(){
   const root = document.getElementById('modalRoot');
   const expenses = await getTodayExpenses();
-  const total = expenses.reduce((s,e) => s + (Number(e.amount)||0), 0);
   root.innerHTML = `
   <div class="overlay">
     <div class="sheet">
       <div class="sheet-head">
-        <h2>هزینه‌های امروز</h2>
+        <h2>خزانه‌داری امروز</h2>
         <button class="close-x" onclick="closeModal()">×</button>
       </div>
-      <div class="report-line"><span>مجموع هزینه‌های امروز</span><b>${fmt(total)} TL</b></div>
+      <div id="treasurySummaryWrap"></div>
       <div class="save-bar">
-        <button class="save" onclick="openAddExpenseForm()">+ ثبت هزینه‌ی جدید</button>
+        <button class="save" onclick="openAddExpenseForm()">+ ثبت هزینه</button>
+      </div>
+      <div class="save-bar">
+        <button class="cancel" onclick="openAddCashboxIncomeForm()">+ دریافتی از صندوق</button>
+        <button class="cancel" onclick="openAddCashboxPaymentForm()">+ پرداخت نقدی به صندوق</button>
       </div>
       <div id="expensesListWrap"></div>
     </div>
   </div>`;
+  renderTreasurySummary(expenses);
   renderExpensesList(expenses);
+}
+
+function renderTreasurySummary(expenses){
+  const wrap = document.getElementById('treasurySummaryWrap');
+  if(!wrap) return;
+
+  const customerCashCollected = currentOrders
+    .filter(o => o.status === 'delivered')
+    .reduce((s,o) => s + getOrderPayments(o).filter(p => p.method === 'نقد').reduce((s2,p) => s2 + (Number(p.amountTL)||0), 0), 0);
+
+  const expensesFromCustomerCash = expenses.filter(e => (e.type||'expense') === 'expense' && e.source === 'مشتری‌ها').reduce((s,e) => s + (Number(e.amount)||0), 0);
+  const cashHandedToBox = expenses.filter(e => e.type === 'cashbox_payment').reduce((s,e) => s + (Number(e.amount)||0), 0);
+  const netCustomerCashOwed = customerCashCollected - expensesFromCustomerCash - cashHandedToBox;
+
+  const cashboxIncome = expenses.filter(e => e.type === 'cashbox_income').reduce((s,e) => s + (Number(e.amount)||0), 0);
+  const expensesFromCashbox = expenses.filter(e => (e.type||'expense') === 'expense' && e.source === 'صندوق').reduce((s,e) => s + (Number(e.amount)||0), 0);
+  const cashboxBalance = cashboxIncome - expensesFromCashbox;
+
+  const expensesFromOwnMoney = expenses.filter(e => (e.type||'expense') === 'expense' && (e.source === 'خودم' || !e.source)).reduce((s,e) => s + (Number(e.amount)||0), 0);
+
+  wrap.innerHTML = `
+    <div class="report-line"><span>نقد مشتری‌ها که باید تحویل بدی</span><b>${fmt(netCustomerCashOwed)} TL</b></div>
+    <div class="report-line"><span>باقی‌مانده‌ی پول صندوق دستت</span><b>${fmt(cashboxBalance)} TL</b></div>
+    <div class="report-line"><span>هزینه‌ی شخصی خودت</span><b>${fmt(expensesFromOwnMoney)} TL</b></div>
+  `;
 }
 
 function renderExpensesList(expenses){
   const wrap = document.getElementById('expensesListWrap');
   if(!wrap) return;
   if(expenses.length === 0){
-    wrap.innerHTML = '<div class="empty">هنوز هزینه‌ای ثبت نشده.</div>';
+    wrap.innerHTML = '<div class="empty">هنوز چیزی ثبت نشده.</div>';
     return;
   }
-  wrap.innerHTML = expenses.slice().reverse().map(e => `
+  wrap.innerHTML = expenses.slice().reverse().map(e => {
+    const type = e.type || 'expense';
+    let title, badgeClass, sign;
+    if(type === 'cashbox_income'){
+      title = '💰 دریافتی از صندوق' + (e.note ? ' — ' + escapeHtml(e.note) : '');
+      badgeClass = 'transfer';
+      sign = '+';
+    } else if(type === 'cashbox_payment'){
+      title = '📤 پرداخت نقدی به صندوق' + (e.note ? ' — ' + escapeHtml(e.note) : '');
+      badgeClass = 'cash';
+      sign = '-';
+    } else {
+      const sourceLabel = e.source ? ' (از پول ' + escapeHtml(e.source) + ')' : '';
+      title = escapeHtml(e.category) + sourceLabel + (e.note ? ' — ' + escapeHtml(e.note) : '');
+      badgeClass = 'pending';
+      sign = '-';
+    }
+    return `
     <div class="order">
       <div class="order-body">
-        <div class="order-name">${escapeHtml(e.category)}${e.note ? ' — ' + escapeHtml(e.note) : ''}</div>
+        <div class="order-name">${title}</div>
         <div class="order-addr">${escapeHtml(e.time || '')}</div>
         <div class="order-actions">
-          <span class="badge cash">${fmt(e.amount)} TL</span>
+          <span class="badge ${badgeClass}">${sign}${fmt(e.amount)} TL</span>
           <button class="danger" onclick="deleteExpense('${e.id}')">حذف</button>
         </div>
       </div>
     </div>
-  `).join('');
+  `;
+  }).join('');
 }
 
 function openAddExpenseForm(){
@@ -444,6 +492,10 @@ function openAddExpenseForm(){
       <div class="chip-group" id="expenseCategoryGroup">
         ${EXPENSE_CATEGORIES.map(c => `<button type="button" class="chip" data-val="${c}">${c}</button>`).join('')}
       </div>
+      <label>از کدوم پول دادی؟</label>
+      <div class="chip-group" id="expenseSourceGroup">
+        ${EXPENSE_SOURCES.map(s => `<button type="button" class="chip" data-val="${s}">${s}</button>`).join('')}
+      </div>
       <label>مبلغ (لیر)</label>
       <input type="text" inputmode="numeric" id="expense_amount">
       <label>یادداشت (اختیاری)</label>
@@ -455,6 +507,51 @@ function openAddExpenseForm(){
     </div>
   </div>`);
   setupChipGroup('expenseCategoryGroup', EXPENSE_CATEGORIES[0]);
+  setupChipGroup('expenseSourceGroup', EXPENSE_SOURCES[0]);
+}
+
+function openAddCashboxIncomeForm(){
+  const root = document.getElementById('modalRoot');
+  root.insertAdjacentHTML('beforeend', `
+  <div class="overlay" style="z-index:70;">
+    <div class="sheet">
+      <div class="sheet-head">
+        <h2>دریافتی از صندوق</h2>
+        <button class="close-x" onclick="closeExpenseForm()">×</button>
+      </div>
+      <p style="font-size:13px;color:var(--muted);line-height:1.7;">پولی که رستوران بهت داده (مثلاً برای خرد کردن یا هزینه‌ی کاری) — این جدا از پول مشتری‌هاست.</p>
+      <label>مبلغ (لیر)</label>
+      <input type="text" inputmode="numeric" id="cashbox_income_amount">
+      <label>یادداشت (اختیاری)</label>
+      <textarea id="cashbox_income_note"></textarea>
+      <div class="save-bar">
+        <button class="cancel" onclick="closeExpenseForm()">انصراف</button>
+        <button class="save" onclick="saveCashboxIncomeForm()">ذخیره</button>
+      </div>
+    </div>
+  </div>`);
+}
+
+function openAddCashboxPaymentForm(){
+  const root = document.getElementById('modalRoot');
+  root.insertAdjacentHTML('beforeend', `
+  <div class="overlay" style="z-index:70;">
+    <div class="sheet">
+      <div class="sheet-head">
+        <h2>پرداخت نقدی به صندوق</h2>
+        <button class="close-x" onclick="closeExpenseForm()">×</button>
+      </div>
+      <p style="font-size:13px;color:var(--muted);line-height:1.7;">وقتی وسط روز نقدیِ فیش‌ها رو از تحویل دادی — این از حسابِ «نقدی که باید تحویل بدی» کم می‌شه.</p>
+      <label>مبلغ (لیر)</label>
+      <input type="text" inputmode="numeric" id="cashbox_payment_amount">
+      <label>یادداشت (اختیاری)</label>
+      <textarea id="cashbox_payment_note"></textarea>
+      <div class="save-bar">
+        <button class="cancel" onclick="closeExpenseForm()">انصراف</button>
+        <button class="save" onclick="saveCashboxPaymentForm()">ذخیره</button>
+      </div>
+    </div>
+  </div>`);
 }
 
 function closeExpenseForm(){
@@ -464,6 +561,7 @@ function closeExpenseForm(){
 
 async function saveExpenseForm(){
   const category = getChipValue('expenseCategoryGroup') || EXPENSE_CATEGORIES[0];
+  const source = getChipValue('expenseSourceGroup') || EXPENSE_SOURCES[0];
   const amount = Number(String((document.getElementById('expense_amount')||{}).value||'').replace(/[^0-9.]/g,'')) || 0;
   const note = (document.getElementById('expense_note')||{}).value || '';
   if(amount <= 0){ toast('مبلغ رو وارد کن'); return; }
@@ -471,11 +569,46 @@ async function saveExpenseForm(){
   expenses.push({
     id: 'exp_' + Date.now() + '_' + Math.random().toString(36).slice(2,7),
     time: new Date().toLocaleTimeString('fa-IR', { hour:'2-digit', minute:'2-digit' }),
-    category, amount, note: note.trim()
+    type: 'expense',
+    category, source, amount, note: note.trim()
   });
   await saveExpensesForDay(todayExpenseKey(), expenses);
   closeExpenseForm();
   toast('هزینه ثبت شد');
+  openExpensesManager();
+}
+
+async function saveCashboxIncomeForm(){
+  const amount = Number(String((document.getElementById('cashbox_income_amount')||{}).value||'').replace(/[^0-9.]/g,'')) || 0;
+  const note = (document.getElementById('cashbox_income_note')||{}).value || '';
+  if(amount <= 0){ toast('مبلغ رو وارد کن'); return; }
+  const expenses = await getTodayExpenses();
+  expenses.push({
+    id: 'exp_' + Date.now() + '_' + Math.random().toString(36).slice(2,7),
+    time: new Date().toLocaleTimeString('fa-IR', { hour:'2-digit', minute:'2-digit' }),
+    type: 'cashbox_income',
+    amount, note: note.trim()
+  });
+  await saveExpensesForDay(todayExpenseKey(), expenses);
+  closeExpenseForm();
+  toast('دریافتی از صندوق ثبت شد');
+  openExpensesManager();
+}
+
+async function saveCashboxPaymentForm(){
+  const amount = Number(String((document.getElementById('cashbox_payment_amount')||{}).value||'').replace(/[^0-9.]/g,'')) || 0;
+  const note = (document.getElementById('cashbox_payment_note')||{}).value || '';
+  if(amount <= 0){ toast('مبلغ رو وارد کن'); return; }
+  const expenses = await getTodayExpenses();
+  expenses.push({
+    id: 'exp_' + Date.now() + '_' + Math.random().toString(36).slice(2,7),
+    time: new Date().toLocaleTimeString('fa-IR', { hour:'2-digit', minute:'2-digit' }),
+    type: 'cashbox_payment',
+    amount, note: note.trim()
+  });
+  await saveExpensesForDay(todayExpenseKey(), expenses);
+  closeExpenseForm();
+  toast('پرداخت به صندوق ثبت شد');
   openExpensesManager();
 }
 
@@ -4069,7 +4202,21 @@ function renderReceivedPanel(){
     ${onlineTotal > 0 ? `<div class="received-line"><span>پرداخت آنلاین (از قبل پرداخت شده)</span><b>${fmt(onlineTotal)} TL</b></div>` : ''}
     ${tipTotal > 0 ? `<div class="received-line" style="color:var(--tip-ink);"><span>💰 تیپ خودکار</span><b>+${fmt(tipTotal)} TL</b></div>` : ''}
     <div class="received-line" style="font-weight:700;border-top:2px solid var(--line);margin-top:4px;padding-top:8px;"><span>جمع کل دریافتی</span><b>${fmt(grandTotal)} TL</b></div>
+    <div id="receivedExpenseDeductions"></div>
   `;
+
+  getTodayExpenses().then(expenses => {
+    const deductEl = document.getElementById('receivedExpenseDeductions');
+    if(!deductEl || expenses.length === 0) return;
+    const expensesFromCustomerCash = expenses.filter(e => (e.type||'expense') === 'expense' && e.source === 'مشتری‌ها').reduce((s,e) => s + (Number(e.amount)||0), 0);
+    const cashHandedToBox = expenses.filter(e => e.type === 'cashbox_payment').reduce((s,e) => s + (Number(e.amount)||0), 0);
+    if(expensesFromCustomerCash <= 0 && cashHandedToBox <= 0) return;
+    let html = '';
+    if(expensesFromCustomerCash > 0) html += `<div class="received-line"><span>🧾 هزینه از دریافتی مشتری‌ها</span><b>-${fmt(expensesFromCustomerCash)} TL</b></div>`;
+    if(cashHandedToBox > 0) html += `<div class="received-line"><span>📤 پرداخت‌شده به صندوق</span><b>-${fmt(cashHandedToBox)} TL</b></div>`;
+    html += `<div class="received-line" style="font-weight:700;"><span>خالص نقدی که دستته</span><b>${fmt(cashTL - expensesFromCustomerCash - cashHandedToBox)} TL</b></div>`;
+    deductEl.innerHTML = html;
+  });
 }
 
 function renderReportSheet(orders, dayKey, isToday, isSingleDay){
@@ -4136,12 +4283,24 @@ function renderReportSheet(orders, dayKey, isToday, isSingleDay){
 
   const expenseKey = EXPENSE_KEY_PREFIX + dayKey.replace(STORAGE_KEY_PREFIX, '');
   getExpensesForDay(expenseKey).then(expenses => {
-    const total = expenses.reduce((s,e) => s + (Number(e.amount)||0), 0);
     const el = document.getElementById('expensesReportLine');
-    if(el && total > 0){
-      el.innerHTML = `<div class="report-line"><span>🧾 هزینه‌های ${isToday ? 'امروز' : 'این روز'} (بنزین، خرید و...)</span><b>-${fmt(total)} TL</b></div>
-        <div class="report-line"><span>خالص نقدی که باید پیشت باشه</span><b>${fmt(cashTotal - total)} TL</b></div>`;
+    if(!el || expenses.length === 0) return;
+
+    const expensesFromCustomerCash = expenses.filter(e => (e.type||'expense') === 'expense' && e.source === 'مشتری‌ها').reduce((s,e) => s + (Number(e.amount)||0), 0);
+    const expensesFromOwnMoney = expenses.filter(e => (e.type||'expense') === 'expense' && (e.source === 'خودم' || !e.source)).reduce((s,e) => s + (Number(e.amount)||0), 0);
+    const expensesFromCashbox = expenses.filter(e => (e.type||'expense') === 'expense' && e.source === 'صندوق').reduce((s,e) => s + (Number(e.amount)||0), 0);
+    const cashboxIncome = expenses.filter(e => e.type === 'cashbox_income').reduce((s,e) => s + (Number(e.amount)||0), 0);
+    const cashHandedToBox = expenses.filter(e => e.type === 'cashbox_payment').reduce((s,e) => s + (Number(e.amount)||0), 0);
+
+    let html = '';
+    if(expensesFromCustomerCash > 0) html += `<div class="report-line"><span>🧾 هزینه از پول مشتری‌ها</span><b>-${fmt(expensesFromCustomerCash)} TL</b></div>`;
+    if(cashHandedToBox > 0) html += `<div class="report-line"><span>📤 پرداخت‌شده به صندوق (وسط روز)</span><b>-${fmt(cashHandedToBox)} TL</b></div>`;
+    html += `<div class="report-line"><span>خالص نقدی مشتری‌ها که باید تحویل بدی</span><b>${fmt(cashTotal - expensesFromCustomerCash - cashHandedToBox)} TL</b></div>`;
+    if(cashboxIncome > 0 || expensesFromCashbox > 0){
+      html += `<div class="report-line"><span>💰 پول صندوق (دریافتی − هزینه‌شده)</span><b>${fmt(cashboxIncome - expensesFromCashbox)} TL</b></div>`;
     }
+    if(expensesFromOwnMoney > 0) html += `<div class="report-line"><span>هزینه‌ی شخصی خودت</span><b>${fmt(expensesFromOwnMoney)} TL</b></div>`;
+    el.innerHTML = html;
   });
 }
 
