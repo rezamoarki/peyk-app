@@ -222,7 +222,7 @@ textarea{min-height:64px;resize:vertical;}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script>
-const APP_VERSION = 'v12.5 · 2026-08-25';
+const APP_VERSION = 'v12.7 · 2026-08-25';
 const STORAGE_KEY_PREFIX = 'orders:';
 const EXPENSE_KEY_PREFIX = 'expenses:';
 const EXPENSE_CATEGORIES = ['بنزین', 'خرید فروشگاهی', 'سایر'];
@@ -2228,6 +2228,7 @@ function queueOrderCard(o, idx, total){
         ${idx>0 ? `<button onclick="moveOrderPriority('${o.id}', -1)"><span class="ico">⬆️</span>اولویت بالاتر</button>` : ''}
         ${idx<total-1 ? `<button onclick="moveOrderPriority('${o.id}', 1)"><span class="ico">⬇️</span>اولویت پایین‌تر</button>` : ''}
         <button onclick="openMap('${escapeJs(mapTarget)}')"><span class="ico">🗺️</span>نقشه</button>
+        <button onclick="recordArrivalLocation('${o.id}')"><span class="ico">📍</span>رسیدم اینجا</button>
         ${receiptPhotoButtonHtml(o)}
         <button onclick="editOrder('${o.id}')"><span class="ico">✏️</span>ویرایش</button>
         <button class="danger" onclick="cancelOrder('${o.id}')"><span class="ico">❌</span>کنسل شد</button>
@@ -2445,6 +2446,7 @@ function showCancelledList(){
   currentListView = 'cancelled';
   const cancelled = currentOrders.filter(o => o.status === 'cancelled').slice().sort((a,b) => (b.cancelledAtTs||0) - (a.cancelledAtTs||0));
   const root = document.getElementById('modalRoot');
+  root.innerHTML = '';
   root.innerHTML = `
   <div class="overlay">
     <div class="sheet">
@@ -2914,7 +2916,8 @@ function buildReceiptPrompt(){
   const masaNote = `\nمهم: رسیدهای داخلی "RIOVERDE" اسم مشتری ندارن، فقط یه شماره "MASA" دارن (مثلاً MASA :413). برای این نوع رسید، فیلد name رو اینطوری بساز: "Masa " + همون عدد (مثلاً "Masa 413") — نه خالی بذار، نه چیز دیگه‌ای بنویس.`;
   const timeNote = `\nمهم: ساعت واقعی سفارش رو هم پیدا کن — توی رسیدهای Feed Me جلوی "Sip. Zamanı:" داخل پرانتز (مثلاً 17.07.2026 (21:22) یعنی ساعت 21:22)، توی رسیدهای RIOVERDE جلوی "SAAT:" (مثلاً SAAT:20:40:00 یعنی ساعت 20:40). این ساعت رو دقیقاً به فرمت HH:MM برگردون، نه ساعتی که الان هست.`;
   const receiptCheckNote = `\nمهم: اول بررسی کن این عکس اصلاً یه رسید سفارش رستوران (Feed Me یا RIOVERDE) هست یا نه. اگه این عکس چیز دیگه‌ایه (مثلاً سلفی، عکس خیابون، صفحه‌ی گوشی، یا هر چیز نامرتبط دیگه)، فیلد isReceipt رو false بذار و بقیه‌ی فیلدها رو خالی بذار — هیچی حدس نزن.`;
-  return `این عکس یک رسید سفارش رستوران سوشی (به ترکی) است. دو نوع رسید ممکن است باشد: رسیدهای "Feed Me" که شامل نام مشتری، Telefon، Adres، Ürün و Fatura (مبلغ نهایی) است، یا رسید داخلی رستوران "RIOVERDE" که شامل Genel Toplam / Kalan Odeme به عنوان مبلغ نهایی است و ممکن است شماره تلفن یا آدرس با خط دست روی آن نوشته شده باشد.${receiptCheckNote}${qrNote}${phoneNote}${masaNote}${timeNote}
+  const handwritingNote = `\nمهم: بعضی از این رسیدها، خصوصاً RIOVERDE، آدرس یا شماره تلفن رو با خط دست (نه چاپی) روی رسید نوشتن — این خط دست معمولاً ناقص یا بدخط به‌نظر می‌رسه، ولی باید حتماً باهاش تلاش کنی و اون رو بخونی، نه این‌که فیلد رو خالی بذاری. با دقت زیاد به هر حرف/عدد دست‌نویس نگاه کن، حتی اگه مطمئن نیستی، بهترین حدس معقولت رو بنویس (به‌جای خالی گذاشتن)، چون همیشه پیک می‌تونه بعداً دستی اصلاحش کنه.`;
+  return `این عکس یک رسید سفارش رستوران سوشی (به ترکی) است. دو نوع رسید ممکن است باشد: رسیدهای "Feed Me" که شامل نام مشتری، Telefon، Adres، Ürün و Fatura (مبلغ نهایی) است، یا رسید داخلی رستوران "RIOVERDE" که شامل Genel Toplam / Kalan Odeme به عنوان مبلغ نهایی است و ممکن است شماره تلفن یا آدرس با خط دست روی آن نوشته شده باشد.${receiptCheckNote}${qrNote}${phoneNote}${masaNote}${timeNote}${handwritingNote}
 نوع پرداخت (نقد/کارت) را استخراج نکن، چون قابل اعتماد نیست و بعداً موقع تحویل توسط پیک ثبت می‌شود. ولی اگه خود رسید صریحاً نشون می‌ده که سفارش از قبل و آنلاین پرداخت شده (مثلاً نوشته "Online Ödeme"، "Ödendi"، "Kredi Kartı (Online)" یا هر عبارت مشابهی که یعنی پول از قبل گرفته شده و پیک نیازی به دریافت وجه نداره)، این رو توی فیلد paidOnline مشخص کن.
 اطلاعات زیر را استخراج کن و فقط یک JSON خام (بدون توضیح، بدون markdown) با این کلیدها برگردان:
 {"isReceipt": true یا false, "name": "نام مشتری، یا برای RIOVERDE: Masa <شماره میز>", "address": "آدرس کامل، اگر جمله‌ای در متن تکرار شده حذفش کن و فقط یک بار بنویس", "phone": "شماره تلفن مشتری یا خالی", "amount": عدد مبلغ نهایی قابل پرداخت بدون واحد, "source": "Feed Me یا تلفن رستوران", "notes": "تمام یادداشت‌ها و توضیحات نوشته‌شده روی رسید (چه چاپی چه دست‌نویس) رو کامل و بدون خلاصه‌کردن بردار — نه فقط بخشی از اون. اگه به ترکی یا زبان دیگه‌ای نوشته شده، کل متن رو کامل به فارسی ترجمه کن، چیزی رو حذف یا کوتاه نکن", "orderNo": "شماره سفارش (Sip. No) یا خالی", "items": "لیست کامل اقلام سفارش با تعداد و قیمت هرکدوم، خط به خط، دقیقا مطابق رسید", "orderTime": "ساعت سفارش به فرمت HH:MM از روی خود رسید، یا خالی اگه پیدا نشد", "paidOnline": true یا false — فقط اگه رسید صریحاً نشون بده از قبل آنلاین پرداخت شده، وگرنه false}
@@ -3974,6 +3977,7 @@ function showQueueList(){
   currentListView = 'queue';
   const pending = currentOrders.filter(o => o.status !== 'delivered' && o.status !== 'cancelled').sort((a,b) => (a.priority||0) - (b.priority||0));
   const root = document.getElementById('modalRoot');
+  root.innerHTML = '';
   root.innerHTML = `
   <div class="overlay">
     <div class="sheet">
@@ -3991,6 +3995,7 @@ function showDeliveredList(){
   currentListView = 'delivered';
   const delivered = currentOrders.filter(o => o.status === 'delivered').slice().sort((a,b) => (a.deliveredAtTs||0) - (b.deliveredAtTs||0));
   const root = document.getElementById('modalRoot');
+  root.innerHTML = '';
   root.innerHTML = `
   <div class="overlay">
     <div class="sheet">
