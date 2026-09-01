@@ -222,7 +222,7 @@ textarea{min-height:64px;resize:vertical;}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script>
-const APP_VERSION = 'v13.0 · 2026-08-31';
+const APP_VERSION = 'v13.3 · 2026-09-01';
 const STORAGE_KEY_PREFIX = 'orders:';
 const EXPENSE_KEY_PREFIX = 'expenses:';
 const EXPENSE_CATEGORIES = ['بنزین', 'خرید فروشگاهی', 'سایر'];
@@ -360,6 +360,28 @@ async function migrateOrdersToIndexedDb(){
   }
 }
 
+async function migrateExpensesToIndexedDb(){
+  const flagKey = 'idb_migration_expenses_v1';
+  if(localStorage.getItem(flagKey)) return;
+  try{
+    const keysToMove = [];
+    for(let i=0;i<localStorage.length;i++){
+      const k = localStorage.key(i);
+      if(k && k.indexOf(EXPENSE_KEY_PREFIX) === 0) keysToMove.push(k);
+    }
+    for(const k of keysToMove){
+      const v = localStorage.getItem(k);
+      if(v != null){
+        await idbStore.set(k, v);
+        localStorage.removeItem(k);
+      }
+    }
+    localStorage.setItem(flagKey, '1');
+  }catch(e){
+    console.error('IndexedDB expenses migration failed, staying on localStorage:', e);
+  }
+}
+
 let todayKey = () => {
   const d = new Date();
   return STORAGE_KEY_PREFIX + d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
@@ -377,13 +399,13 @@ function getDisplayOrderNumber(o){
 
 async function getExpensesForDay(dayKey){
   try{
-    const r = await localStore.get(dayKey);
+    const r = await idbStore.get(dayKey);
     return r ? JSON.parse(r.value) : [];
   }catch(e){ return []; }
 }
 
 async function saveExpensesForDay(dayKey, list){
-  await localStore.set(dayKey, JSON.stringify(list));
+  await idbStore.set(dayKey, JSON.stringify(list));
 }
 
 async function getTodayExpenses(){
@@ -471,6 +493,7 @@ function renderExpensesList(expenses){
         <div class="order-addr">${escapeHtml(e.time || '')}</div>
         <div class="order-actions">
           <span class="badge ${badgeClass}">${sign}${fmt(e.amount)} TL</span>
+          ${e.receiptPhoto ? `<button onclick="openImageLightbox('data:${e.receiptPhotoMedia};base64,${e.receiptPhoto}')">🧾 فیش</button>` : ''}
           <button class="danger" onclick="deleteExpense('${e.id}')">حذف</button>
         </div>
       </div>
@@ -498,6 +521,16 @@ function openAddExpenseForm(){
       </div>
       <label>مبلغ (لیر)</label>
       <input type="text" inputmode="numeric" id="expense_amount">
+      <label>عکس فیش خرید (اختیاری)</label>
+      <div class="photo-zone">
+        <div id="expensePhotoPreview"></div>
+        <div class="photo-btns">
+          <button onclick="document.getElementById('expensePhotoCam').click()">دوربین</button>
+          <button onclick="document.getElementById('expensePhotoGal').click()">از گالری</button>
+        </div>
+        <input type="file" id="expensePhotoCam" class="hidden-file-input" accept="image/*" capture="environment" onchange="onExpensePhotoSelected(event)">
+        <input type="file" id="expensePhotoGal" class="hidden-file-input" accept="image/*" onchange="onExpensePhotoSelected(event)">
+      </div>
       <label>یادداشت (اختیاری)</label>
       <textarea id="expense_note"></textarea>
       <div class="save-bar">
@@ -508,6 +541,24 @@ function openAddExpenseForm(){
   </div>`);
   setupChipGroup('expenseCategoryGroup', EXPENSE_CATEGORIES[0]);
   setupChipGroup('expenseSourceGroup', EXPENSE_SOURCES[0]);
+  window._expensePhoto = null;
+}
+
+function onExpensePhotoSelected(evt){
+  const file = evt.target.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = async () => {
+    const originalDataUrl = reader.result;
+    const wrap = document.getElementById('expensePhotoPreview');
+    if(wrap) wrap.innerHTML = `<img src="${originalDataUrl}" onclick="openImageLightbox(this.src)" style="cursor:zoom-in;">`;
+    const resized = await resizeImageDataUrl(originalDataUrl, 1280);
+    window._expensePhoto = {
+      media: resized.dataUrl.startsWith('data:image/jpeg') ? 'image/jpeg' : (file.type || 'image/jpeg'),
+      base64: resized.dataUrl.split(',')[1]
+    };
+  };
+  reader.readAsDataURL(file);
 }
 
 function openAddCashboxIncomeForm(){
@@ -566,13 +617,17 @@ async function saveExpenseForm(){
   const note = (document.getElementById('expense_note')||{}).value || '';
   if(amount <= 0){ toast('مبلغ رو وارد کن'); return; }
   const expenses = await getTodayExpenses();
+  const photo = window._expensePhoto;
   expenses.push({
     id: 'exp_' + Date.now() + '_' + Math.random().toString(36).slice(2,7),
     time: new Date().toLocaleTimeString('fa-IR', { hour:'2-digit', minute:'2-digit' }),
     type: 'expense',
-    category, source, amount, note: note.trim()
+    category, source, amount, note: note.trim(),
+    receiptPhoto: photo ? photo.base64 : null,
+    receiptPhotoMedia: photo ? photo.media : null
   });
   await saveExpensesForDay(todayExpenseKey(), expenses);
+  window._expensePhoto = null;
   closeExpenseForm();
   toast('هزینه ثبت شد');
   openExpensesManager();
@@ -1257,7 +1312,7 @@ async function runLocationAiRead(){
   try{
     let parsed;
     if(geminiKey){
-      const response = await fetch("https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent", {
+      const response = await fetch("https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent", {
         method: "POST",
         headers: { "Content-Type": "application/json", "x-goog-api-key": geminiKey },
         body: JSON.stringify({
@@ -1685,13 +1740,21 @@ function resetUsageStatsFromSettings(){
 }
 
 async function buildBackupData(){
-  const data = { exportedAt: new Date().toISOString(), version: APP_VERSION, orders: {}, savedLocations: [], usageStats: null };
+  const data = { exportedAt: new Date().toISOString(), version: APP_VERSION, orders: {}, expenses: {}, savedLocations: [], usageStats: null };
   const listRes = await idbStore.list(STORAGE_KEY_PREFIX);
   const keys = (listRes && listRes.keys) ? listRes.keys : [];
   for(const k of keys){
     try{
       const r = await idbStore.get(k);
       if(r) data.orders[k] = JSON.parse(r.value);
+    }catch(e){}
+  }
+  const expenseListRes = await idbStore.list(EXPENSE_KEY_PREFIX);
+  const expenseKeys = (expenseListRes && expenseListRes.keys) ? expenseListRes.keys : [];
+  for(const k of expenseKeys){
+    try{
+      const r = await idbStore.get(k);
+      if(r) data.expenses[k] = JSON.parse(r.value);
     }catch(e){}
   }
   data.savedLocations = getSavedLocations();
@@ -1750,6 +1813,13 @@ function importAllDataJson(evt){
           if(k.indexOf(STORAGE_KEY_PREFIX) === 0){
             await idbStore.set(k, JSON.stringify(data.orders[k]));
             orderDaysCount++;
+          }
+        }
+      }
+      if(data.expenses){
+        for(const k of Object.keys(data.expenses)){
+          if(k.indexOf(EXPENSE_KEY_PREFIX) === 0){
+            await idbStore.set(k, JSON.stringify(data.expenses[k]));
           }
         }
       }
@@ -2025,6 +2095,7 @@ function toast(msg, longDuration){
 
 async function loadOrders(){
   await migrateOrdersToIndexedDb();
+  await migrateExpensesToIndexedDb();
   try{
     const res = await idbStore.get(todayKey());
     currentOrders = res ? JSON.parse(res.value) : [];
@@ -2238,11 +2309,6 @@ function render(){
       html += '<div class="section-label"><span>صف بعدی (' + rest.length + ')</span></div>';
       html += rest.map((o, i) => queueOrderCard(o, i, rest.length)).join('');
     }
-  }
-
-  if(delivered.length > 0){
-    html += '<div class="section-label"><span>تحویل داده‌شده امروز (' + delivered.length + ')</span></div>';
-    html += delivered.slice().reverse().map(o => deliveredOrderCard(o)).join('');
   }
 
   main.innerHTML = html;
@@ -3138,7 +3204,7 @@ async function runGeminiExtract(){
   statusEl.textContent = 'در حال خواندن با Gemini...';
 
   try{
-    const response = await fetchWithTimeout("https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent", {
+    const response = await fetchWithTimeout("https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -3156,7 +3222,7 @@ async function runGeminiExtract(){
           responseSchema: GEMINI_SCHEMA
         }
       })
-    }, 12000);
+    }, 20000);
 
     if(!response.ok){
       if(response.status === 401 || response.status === 403){
@@ -3229,7 +3295,7 @@ async function runNvidiaExtract(){
           ]
         }]
       })
-    }, 12000);
+    }, 20000);
 
     if(!response.ok){
       if(response.status === 401){
@@ -3596,7 +3662,7 @@ async function runPaymentPhotoAmountRead(key){
   const prompt = `این عکس یک فیش دستگاه پوز (کارت‌خوان) است. فقط مبلغ نهایی پرداخت‌شده (به لیر ترکیه) رو از روش پیدا کن — هیچی حدس نزن. اگه واضح نبود یا اصلاً فیش پوز نبود، amount رو صفر بذار. فقط یک JSON خام برگردون: {"amount": عدد}`;
 
   try{
-    const response = await fetch("https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent", {
+    const response = await fetch("https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent", {
       method: "POST",
       headers: { "Content-Type": "application/json", "x-goog-api-key": geminiKey },
       body: JSON.stringify({
